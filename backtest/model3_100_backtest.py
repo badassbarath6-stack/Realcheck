@@ -32,30 +32,27 @@ def load_tf(tf):
     for y,m in months():
         name=f"BTCUSDT-{tf}-{y}-{m:02d}.zip"
         url=f"{BASE}/{tf}/{name}"
-        try: raw=get(url)
+        archives=[]
+        try:
+            archives=[get(url)]
         except Exception as e:
-            # November 2026 is partial; use daily archives for current month.
             if (y,m)==(2026,11):
                 for d in range(1,17):
                     dn=f"BTCUSDT-{tf}-{y}-{m:02d}-{d:02d}.zip"
-                    try: z=zipfile.ZipFile(io.BytesIO(get(f"https://data.binance.vision/data/futures/um/daily/klines/BTCUSDT/{tf}/{dn}")))
+                    try: archives.append(get(f"https://data.binance.vision/data/futures/um/daily/klines/BTCUSDT/{tf}/{dn}"))
                     except Exception: continue
-                    for line in io.TextIOWrapper(z.open(z.namelist()[0]),encoding="utf-8"):
-                        a=line.strip().split(",")
-                        if len(a)>=6:
-                            if not a[0].isdigit(): continue  # Binance Vision CSV header row\n            t=int(a[0])
-                            if START<=t<END: rows.append((t,*map(float,a[1:6])))
-                continue
-            raise RuntimeError(f"Could not download {url}: {e}")
-        z=zipfile.ZipFile(io.BytesIO(raw))
-        for line in io.TextIOWrapper(z.open(z.namelist()[0]),encoding="utf-8"):
-            a=line.strip().split(",")
-            if len(a)>=6:
-                t=int(a[0])
-                if START<=t<END: rows.append((t,*map(float,a[1:6])))
+            else:
+                raise RuntimeError(f"Could not download {url}: {e}")
+        for raw in archives:
+            z=zipfile.ZipFile(io.BytesIO(raw))
+            with z.open(z.namelist()[0]) as stream:
+                for line in io.TextIOWrapper(stream,encoding="utf-8"):
+                    a=line.strip().split(",")
+                    if len(a)<6 or not a[0].isdigit(): continue
+                    t=int(a[0])
+                    if START<=t<END: rows.append((t,*map(float,a[1:6])))
     rows.sort()
     if not rows: raise RuntimeError(f"No {tf} data downloaded")
-    # de-duplicate timestamps
     return [dict(t=r[0],o=r[1],h=r[2],l=r[3],c=r[4],v=r[5]) for r in {r[0]:r for r in rows}.values()]
 
 def wilder(vals,n):
