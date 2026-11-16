@@ -43,7 +43,7 @@ def load_tf(tf):
                     for line in io.TextIOWrapper(z.open(z.namelist()[0]),encoding="utf-8"):
                         a=line.strip().split(",")
                         if len(a)>=6:
-                            t=int(a[0])
+                            if not a[0].isdigit(): continue  # Binance Vision CSV header row\n            t=int(a[0])
                             if START<=t<END: rows.append((t,*map(float,a[1:6])))
                 continue
             raise RuntimeError(f"Could not download {url}: {e}")
