@@ -215,7 +215,7 @@ def main():
         c_trades=[]; signals=entries=expired=invalidated=0
         # Process one completed 1h candle at a time, matching runModel3Engine().
         for i in range(max(1,start_i),end_i):
-            sig=impulse_signal(bars[i-1],ind,i-1,cfg)
+            sig=impulse_signal(bars[i-1],ind,i-1,cfg) if bars[i-1]["t"]>=START else 0
             if sig: signals+=1
             had_pending=st["pending"] is not None
             result,filled,setup=advance(st,bars,i,sig,cfg,funding)
