@@ -183,28 +183,37 @@ def load_funding():
         if (y,m)<(2024,11) or (y,m)>(2026,11): continue
         name=f"BTCUSDT-fundingRate-{y}-{m:02d}.zip"
         url=f"https://data.binance.vision/data/futures/um/monthly/fundingRate/BTCUSDT/{name}"
+        archives=[]
         try:
-            raw=get(url)
+            archives.append((name,get(url)))
         except Exception as e:
-            if (y,m)==(2026,11):
-                raise RuntimeError(f"Official Binance funding archive unavailable for required partial month {y}-{m:02d}: {e}")
-            raise RuntimeError(f"Could not download official Binance funding archive {url}: {e}")
-        with zipfile.ZipFile(io.BytesIO(raw)) as z:
-            with z.open(z.namelist()[0]) as stream:
-                reader=csv.reader(io.TextIOWrapper(stream,encoding="utf-8"))
-                first=True
-                for row in reader:
-                    if not row: continue
-                    if first and not row[0].strip().replace(".","",1).isdigit():
+            if (y,m)!=(2026,11):
+                raise RuntimeError(f"Could not download official Binance funding archive {url}: {e}")
+            # Binance publishes the current incomplete month as daily archives.
+            for d in range(1,16):
+                date=f"{y}-{m:02d}-{d:02d}"
+                dn=f"BTCUSDT-fundingRate-{date}.zip"
+                du=f"https://data.binance.vision/data/futures/um/daily/fundingRate/BTCUSDT/{dn}"
+                try: archives.append((dn,get(du)))
+                except Exception as de:
+                    raise RuntimeError(f"Could not download official daily funding archive {du}: {de}")
+        for archive_name,raw in archives:
+            with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                with z.open(z.namelist()[0]) as stream:
+                    reader=csv.reader(io.TextIOWrapper(stream,encoding="utf-8"))
+                    first=True
+                    for row in reader:
+                        if not row: continue
+                        if first and not row[0].strip().replace(".","",1).isdigit():
+                            first=False
+                            continue
                         first=False
-                        continue
-                    first=False
-                    try:
-                        t=int(float(row[0]))
-                        rate=float(row[2])
-                    except (ValueError,IndexError):
-                        raise RuntimeError(f"Unrecognized Binance funding CSV row in {name}: {row}")
-                    if START-30*86400000<=t<END: out.append((t,rate))
+                        try:
+                            t=int(float(row[0]))
+                            rate=float(row[2])
+                        except (ValueError,IndexError):
+                            raise RuntimeError(f"Unrecognized Binance funding CSV row in {archive_name}: {row}")
+                        if START-30*86400000<=t<END: out.append((t,rate))
     out=sorted(set(out))
     if not out: raise RuntimeError("No historical Binance USD-M funding rates returned from official Vision archives")
     return out
