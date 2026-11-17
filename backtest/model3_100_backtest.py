@@ -176,22 +176,37 @@ def advance(st,bars,i,sig,cfg,funding):
 def iso(ms): return datetime.fromtimestamp(ms/1000,timezone.utc).isoformat()
 
 def load_funding():
-    # Historical USD-M funding is charged at funding timestamps crossed by a position.
-    start=START-30*86400000; end=END
-    out=[]; cursor=start
-    while cursor<end:
-        url=f"https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&startTime={cursor}&endTime={end-1}&limit=1000"
-        data=json.loads(get(url).decode("utf-8"))
-        if not data: break
-        for x in data:
-            t=int(x["fundingTime"])
-            if start<=t<end: out.append((t,float(x["fundingRate"])))
-        nxt=int(data[-1]["fundingTime"])+1
-        if nxt<=cursor: raise RuntimeError("Funding pagination did not advance")
-        cursor=nxt
-        if len(data)<1000: break
-    out.sort()
-    if not out: raise RuntimeError("No historical Binance USD-M funding rates returned")
+    # Use Binance's official Vision archive, not the geo-restricted REST API.
+    # USD-M monthly funding CSV schema: calc_time,funding_interval_hours,last_funding_rate.
+    out=[]
+    for y,m in months():
+        if (y,m)<(2024,11) or (y,m)>(2026,11): continue
+        name=f"BTCUSDT-fundingRate-{y}-{m:02d}.zip"
+        url=f"https://data.binance.vision/data/futures/um/monthly/fundingRate/BTCUSDT/{name}"
+        try:
+            raw=get(url)
+        except Exception as e:
+            if (y,m)==(2026,11):
+                raise RuntimeError(f"Official Binance funding archive unavailable for required partial month {y}-{m:02d}: {e}")
+            raise RuntimeError(f"Could not download official Binance funding archive {url}: {e}")
+        with zipfile.ZipFile(io.BytesIO(raw)) as z:
+            with z.open(z.namelist()[0]) as stream:
+                reader=csv.reader(io.TextIOWrapper(stream,encoding="utf-8"))
+                first=True
+                for row in reader:
+                    if not row: continue
+                    if first and not row[0].strip().replace(".","",1).isdigit():
+                        first=False
+                        continue
+                    first=False
+                    try:
+                        t=int(float(row[0]))
+                        rate=float(row[2])
+                    except (ValueError,IndexError):
+                        raise RuntimeError(f"Unrecognized Binance funding CSV row in {name}: {row}")
+                    if START-30*86400000<=t<END: out.append((t,rate))
+    out=sorted(set(out))
+    if not out: raise RuntimeError("No historical Binance USD-M funding rates returned from official Vision archives")
     return out
 
 def main():
