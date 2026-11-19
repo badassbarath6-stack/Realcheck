@@ -6,16 +6,24 @@ The five-minute trigger is polling cadence, NOT a one-minute execution timeframe
 This replay therefore uses completed 1h candles for impulse, entry, stop, target,
 and time exits, and preserves an independent state machine for every config.
 """
-import csv, io, json, math, re, time
+import csv, io, json, math, re, time, zipfile
 from datetime import datetime, timezone, timedelta
 from urllib.request import urlopen, Request
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from bisect import bisect_left
 
 # Rolling six-month window ending at the latest fully closed UTC hour.
 END_DT = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
 END = int(END_DT.timestamp() * 1000)
-START_DT = END_DT - timedelta(days=183)
+# Calendar six months (not a fixed 183-day approximation).
+_start_month = END_DT.month - 6
+_start_year = END_DT.year
+if _start_month <= 0:
+    _start_month += 12
+    _start_year -= 1
+import calendar
+START_DT = END_DT.replace(year=_start_year, month=_start_month,
+                          day=min(END_DT.day, calendar.monthrange(_start_year, _start_month)[1]))
 START = int(START_DT.timestamp() * 1000)
 WARMUP_START = START - 500 * 3600000
 OKX_BASE = "https://www.okx.com"
@@ -193,28 +201,95 @@ def advance(st,bars,i,sig,cfg,funding):
 def iso(ms): return datetime.fromtimestamp(ms/1000,timezone.utc).isoformat()
 
 def load_funding():
-    # Funding history for the same OKX BTC-USDT-SWAP perpetual instrument.
-    out, cursor, previous_oldest = [], None, None
+    # OKX's ordinary funding-rate-history REST endpoint only retains ~3 months.
+    # Pull older settlements from OKX's first-party monthly funding archive (module 3),
+    # then overlap the REST history to cover the archive's T+2 publication lag.
     floor_ts = START - 30*86400000
+    start_month = START_DT.replace(day=1)
+    end_month = END_DT.replace(day=1)
+    utc8 = timezone(timedelta(hours=8))
+    archive_begin = int(start_month.replace(tzinfo=utc8).timestamp()*1000)
+    next_month = end_month.replace(year=end_month.year+(1 if end_month.month==12 else 0),
+                                   month=1 if end_month.month==12 else end_month.month+1, day=1)
+    archive_end = int(next_month.replace(tzinfo=utc8).timestamp()*1000)-1
+    params = {"module":"3","instType":"SWAP","instFamilyList":"BTC-USDT",
+              "dateAggrType":"monthly","begin":str(archive_begin),"end":str(archive_end)}
+    listing = okx_get("/api/v5/public/market-data-history", params)
+    details = listing.get("details") if isinstance(listing, dict) else None
+    if not isinstance(details, list):
+        raise RuntimeError(f"OKX historical funding archive response missing data.details: {listing}")
+    archives = {}
+    for detail in details:
+        for item in detail.get("groupDetails", []):
+            filename = item.get("filename") or item.get("fileName")
+            url = item.get("url")
+            if not filename or not url:
+                continue
+            parsed = urlparse(url)
+            if parsed.scheme != "https" or (parsed.hostname or "").lower() != "static.okx.com":
+                raise RuntimeError(f"Untrusted OKX funding archive URL: {url}")
+            archives[filename] = url
+    if not archives:
+        raise RuntimeError("OKX returned no monthly funding archive files for BTC-USDT-SWAP")
+
+    out = {}
+    for filename, url in sorted(archives.items()):
+        req = Request(url, headers={"User-Agent":"Model-3-100-OKX-historical-replay/1.0",
+                                    "Referer":"https://www.okx.com/historical-data"})
+        with urlopen(req, timeout=90) as response:
+            raw = response.read()
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            bad = archive.testzip()
+            if bad is not None:
+                raise RuntimeError(f"OKX funding ZIP CRC failure: {filename}:{bad}")
+            members = [name for name in archive.namelist() if name.lower().endswith(".csv")]
+            if not members:
+                raise RuntimeError(f"OKX funding ZIP has no CSV member: {filename}")
+            for member in members:
+                with archive.open(member) as stream:
+                    reader = csv.reader(io.TextIOWrapper(stream, encoding="utf-8-sig", newline=""))
+                    for row in reader:
+                        if not row or len(row) < 3 or row[0].strip() != OKX_INST:
+                            continue
+                        try:
+                            rate, ts = float(row[1]), int(row[2])
+                        except (ValueError, TypeError) as exc:
+                            raise RuntimeError(f"Malformed OKX funding row in {filename}: {row}") from exc
+                        if floor_ts <= ts < END:
+                            out[ts] = rate
+        time.sleep(0.12)
+
+    # The public REST history is limited to the most recent three months;
+    # merge it over archive data so newest settlements are present too.
+    cursor, previous_oldest = None, None
     while True:
-        params = {"instId":OKX_INST, "limit":"100"}
-        if cursor is not None: params["after"] = str(cursor)
-        page = okx_get("/api/v5/public/funding-rate-history", params)
-        if not page: break
+        q = {"instId":OKX_INST, "limit":"400"}
+        if cursor is not None:
+            q["after"] = str(cursor)
+        page = okx_get("/api/v5/public/funding-rate-history", q)
+        if not page:
+            break
         for row in page:
             try:
                 ts, rate = int(row["fundingTime"]), float(row["fundingRate"])
             except (KeyError,ValueError,TypeError) as exc:
                 raise RuntimeError(f"Unrecognized OKX funding-rate row: {row}") from exc
-            if floor_ts <= ts < END: out.append((ts,rate))
+            if floor_ts <= ts < END:
+                out[ts] = rate
         oldest = min(int(row["fundingTime"]) for row in page)
-        if oldest <= floor_ts: break
-        if previous_oldest == oldest: raise RuntimeError(f"OKX funding pagination stalled at {oldest}")
+        if oldest <= floor_ts:
+            break
+        if previous_oldest == oldest:
+            raise RuntimeError(f"OKX funding pagination stalled at {oldest}")
         previous_oldest, cursor = oldest, oldest
         time.sleep(0.12)
-    out = sorted(set(out))
-    if not out: raise RuntimeError("No historical OKX BTC-USDT-SWAP funding rates returned")
-    return out
+
+    result = sorted(out.items())
+    if not result:
+        raise RuntimeError("No historical OKX BTC-USDT-SWAP funding rates returned")
+    if result[0][0] > START:
+        raise RuntimeError("OKX funding archive does not reach the beginning of the requested six-month test")
+    return result
 
 def main():
     source=open(SOURCE,encoding="utf-8").read()
@@ -275,11 +350,11 @@ def main():
         eq+=t["net_bps"];peak=max(peak,eq);dd=min(dd,eq-peak)
     summary={"status":"COMPLETE","method":"Existing Model 3-100 historical replay logic; independent state per config; OKX live-venue data; no cross-config selection or deduplication",
       "period_utc":{"start":START_DT.isoformat(),"end_exclusive":END_DT.isoformat()},
-      "symbol":"BTC-USDT-SWAP OKX USDT perpetual","configs":len(configs),"data_source":"OKX V5 history-candles + public funding-rate-history","instrument_id":OKX_INST,"hourly_candles_including_warmup":len(bars),
+      "symbol":"BTC-USDT-SWAP OKX USDT perpetual","configs":len(configs),"data_source":"OKX V5 history-candles + official monthly funding archive","instrument_id":OKX_INST,"hourly_candles_including_warmup":len(bars),
       "test_hourly_candles":end_i-start_i,"independent_closed_trades":len(all_trades),"wins":total_wins,"losses":total_losses,
       "win_rate_pct":100*total_wins/len(all_trades) if all_trades else 0,"profit_factor":gp/gl if gl else None,
       "net_bps_sum_across_independent_config_streams":sum(t["net_bps"] for t in all_trades),"max_drawdown_bps_sequential_sum":dd,
-      "fee_bps_per_side":FEE_SIDE_BPS,"slippage_bps_per_side":SLIP_SIDE_BPS,"funding_source":"OKX V5 public funding-rate-history","funding_records":len(funding),
+      "fee_bps_per_side":FEE_SIDE_BPS,"slippage_bps_per_side":SLIP_SIDE_BPS,"funding_source":"OKX official monthly historical funding archive + overlapping V5 funding-rate-history","funding_records":len(funding),
       "entry_exit_timeframe":"1h (same as public Apps Script); 5-minute trigger is polling cadence only",
       "exit_rule":"Source state machine: stop-first, gap-aware stop, target, then 24 completed-bar time exit",
       "end_state":"Open positions and pending orders at end are not force-closed, matching live engine behavior"}
