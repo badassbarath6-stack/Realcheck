@@ -6,15 +6,20 @@ The five-minute trigger is polling cadence, NOT a one-minute execution timeframe
 This replay therefore uses completed 1h candles for impulse, entry, stop, target,
 and time exits, and preserves an independent state machine for every config.
 """
-import csv, io, json, math, re, zipfile
-from datetime import datetime, timezone
+import csv, io, json, math, re, time
+from datetime import datetime, timezone, timedelta
 from urllib.request import urlopen, Request
+from urllib.parse import urlencode
 from bisect import bisect_left
 
-START = int(datetime(2024,11,16,tzinfo=timezone.utc).timestamp()*1000)
-END = int(datetime(2026,11,16,tzinfo=timezone.utc).timestamp()*1000)
+# Rolling six-month window ending at the latest fully closed UTC hour.
+END_DT = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+END = int(END_DT.timestamp() * 1000)
+START_DT = END_DT - timedelta(days=183)
+START = int(START_DT.timestamp() * 1000)
 WARMUP_START = START - 500 * 3600000
-BASE = "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT"
+OKX_BASE = "https://www.okx.com"
+OKX_INST = "BTC-USDT-SWAP"
 SOURCE = "Model_3-100_Google_Apps_Script.gs"
 FEE_SIDE_BPS = 5.0
 SLIP_SIDE_BPS = 2.0
@@ -31,28 +36,40 @@ def months():
         m+=1
         if m==13:y,m=y+1,1
 
+def okx_get(endpoint, params):
+    url = OKX_BASE + endpoint + "?" + urlencode(params)
+    req = Request(url, headers={"User-Agent":"Model-3-100-OKX-historical-replay/1.0","Accept":"application/json"})
+    with urlopen(req, timeout=45) as r:
+        payload = json.loads(r.read().decode("utf-8"))
+    if payload.get("code") != "0" or not isinstance(payload.get("data"), list):
+        raise RuntimeError(f"OKX API error at {endpoint}: {payload}")
+    return payload["data"]
+
 def load_hourly():
-    rows=[]
-    for y,m in months():
-        name=f"BTCUSDT-1h-{y}-{m:02d}.zip"
-        url=f"{BASE}/1h/{name}"
-        try: raw=get(url)
-        except Exception as e:
-            if (y,m)==(2026,11):
-                for d in range(1,17):
-                    dn=f"BTCUSDT-1h-{y}-{m:02d}-{d:02d}.zip"
-                    try: raw_d=get(f"https://data.binance.vision/data/futures/um/daily/klines/BTCUSDT/1h/{dn}")
-                    except Exception: continue
-                    rows.extend(parse_zip(raw_d))
-                continue
-            raise RuntimeError(f"Could not download {url}: {e}")
-        rows.extend(parse_zip(raw))
-    unique={r[0]:r for r in rows if WARMUP_START <= r[0] < END}
-    out=[dict(t=t+3600000,o=r[1],h=r[2],l=r[3],c=r[4],v=r[5]) for t,r in sorted(unique.items())]
-    if not out: raise RuntimeError("No hourly candles downloaded")
-    for a,b in zip(out,out[1:]):
-        if b["t"]-a["t"]!=3600000: raise RuntimeError(f"Hourly data gap at {b['t']}")
-    if out[0]["t"]>START-400*3600000: raise RuntimeError("Insufficient indicator warm-up before test start")
+    # Same venue and perpetual instrument as the live runner: OKX BTC-USDT-SWAP.
+    rows, cursor, previous_oldest = [], None, None
+    while True:
+        params = {"instId":OKX_INST, "bar":"1H", "limit":"100"}
+        if cursor is not None: params["after"] = str(cursor)
+        page = okx_get("/api/v5/market/history-candles", params)
+        if not page: break
+        rows.extend(page)
+        oldest = min(int(k[0]) for k in page)
+        if oldest <= WARMUP_START: break
+        if previous_oldest == oldest: raise RuntimeError(f"OKX hourly pagination stalled at {oldest}")
+        previous_oldest, cursor = oldest, oldest
+        time.sleep(0.12)
+    unique = {}
+    for k in rows:
+        ts = int(k[0])
+        if k[8] != "1" or not (WARMUP_START <= ts < END): continue
+        unique[ts] = tuple(float(x) for x in k[1:6])
+    out = [dict(t=ts+3600000,o=v[0],h=v[1],l=v[2],c=v[3],v=v[4]) for ts,v in sorted(unique.items())]
+    if not out: raise RuntimeError("OKX returned no completed BTC-USDT-SWAP 1H candles")
+    for x,y in zip(out,out[1:]):
+        if y["t"]-x["t"] != 3600000: raise RuntimeError(f"OKX hourly data gap at {y['t']}")
+    if out[0]["t"] > START-400*3600000: raise RuntimeError("Insufficient OKX indicator warm-up before test start")
+    if out[-1]["t"] > END: raise RuntimeError("OKX returned a candle beyond requested end boundary")
     return out
 
 def parse_zip(raw):
@@ -176,46 +193,27 @@ def advance(st,bars,i,sig,cfg,funding):
 def iso(ms): return datetime.fromtimestamp(ms/1000,timezone.utc).isoformat()
 
 def load_funding():
-    # Use Binance's official Vision archive, not the geo-restricted REST API.
-    # USD-M monthly funding CSV schema: calc_time,funding_interval_hours,last_funding_rate.
-    out=[]
-    for y,m in months():
-        if (y,m)<(2024,11) or (y,m)>(2026,11): continue
-        name=f"BTCUSDT-fundingRate-{y}-{m:02d}.zip"
-        url=f"https://data.binance.vision/data/futures/um/monthly/fundingRate/BTCUSDT/{name}"
-        archives=[]
-        try:
-            archives.append((name,get(url)))
-        except Exception as e:
-            if (y,m)!=(2026,11):
-                raise RuntimeError(f"Could not download official Binance funding archive {url}: {e}")
-            # Binance publishes the current incomplete month as daily archives.
-            for d in range(1,16):
-                date=f"{y}-{m:02d}-{d:02d}"
-                dn=f"BTCUSDT-fundingRate-{date}.zip"
-                du=f"https://data.binance.vision/data/futures/um/daily/fundingRate/BTCUSDT/{dn}"
-                try: archives.append((dn,get(du)))
-                except Exception as de:
-                    raise RuntimeError(f"Could not download official daily funding archive {du}: {de}")
-        for archive_name,raw in archives:
-            with zipfile.ZipFile(io.BytesIO(raw)) as z:
-                with z.open(z.namelist()[0]) as stream:
-                    reader=csv.reader(io.TextIOWrapper(stream,encoding="utf-8"))
-                    first=True
-                    for row in reader:
-                        if not row: continue
-                        if first and not row[0].strip().replace(".","",1).isdigit():
-                            first=False
-                            continue
-                        first=False
-                        try:
-                            t=int(float(row[0]))
-                            rate=float(row[2])
-                        except (ValueError,IndexError):
-                            raise RuntimeError(f"Unrecognized Binance funding CSV row in {archive_name}: {row}")
-                        if START-30*86400000<=t<END: out.append((t,rate))
-    out=sorted(set(out))
-    if not out: raise RuntimeError("No historical Binance USD-M funding rates returned from official Vision archives")
+    # Funding history for the same OKX BTC-USDT-SWAP perpetual instrument.
+    out, cursor, previous_oldest = [], None, None
+    floor_ts = START - 30*86400000
+    while True:
+        params = {"instId":OKX_INST, "limit":"100"}
+        if cursor is not None: params["after"] = str(cursor)
+        page = okx_get("/api/v5/public/funding-rate-history", params)
+        if not page: break
+        for row in page:
+            try:
+                ts, rate = int(row["fundingTime"]), float(row["fundingRate"])
+            except (KeyError,ValueError,TypeError) as exc:
+                raise RuntimeError(f"Unrecognized OKX funding-rate row: {row}") from exc
+            if floor_ts <= ts < END: out.append((ts,rate))
+        oldest = min(int(row["fundingTime"]) for row in page)
+        if oldest <= floor_ts: break
+        if previous_oldest == oldest: raise RuntimeError(f"OKX funding pagination stalled at {oldest}")
+        previous_oldest, cursor = oldest, oldest
+        time.sleep(0.12)
+    out = sorted(set(out))
+    if not out: raise RuntimeError("No historical OKX BTC-USDT-SWAP funding rates returned")
     return out
 
 def main():
@@ -275,13 +273,13 @@ def main():
     eq=peak=dd=0.0
     for t in all_trades:
         eq+=t["net_bps"];peak=max(peak,eq);dd=min(dd,eq-peak)
-    summary={"status":"COMPLETE","method":"Exact public Model 3-100 hourly state machine; independent state per config; no cross-config selection or deduplication",
-      "period_utc":{"start":"2024-11-16T00:00:00Z","end_exclusive":"2026-11-16T00:00:00Z"},
-      "symbol":"BTCUSDT USD-M perpetual","configs":len(configs),"hourly_candles_including_warmup":len(bars),
+    summary={"status":"COMPLETE","method":"Existing Model 3-100 historical replay logic; independent state per config; OKX live-venue data; no cross-config selection or deduplication",
+      "period_utc":{"start":START_DT.isoformat(),"end_exclusive":END_DT.isoformat()},
+      "symbol":"BTC-USDT-SWAP OKX USDT perpetual","configs":len(configs),"data_source":"OKX V5 history-candles + public funding-rate-history","instrument_id":OKX_INST,"hourly_candles_including_warmup":len(bars),
       "test_hourly_candles":end_i-start_i,"independent_closed_trades":len(all_trades),"wins":total_wins,"losses":total_losses,
       "win_rate_pct":100*total_wins/len(all_trades) if all_trades else 0,"profit_factor":gp/gl if gl else None,
       "net_bps_sum_across_independent_config_streams":sum(t["net_bps"] for t in all_trades),"max_drawdown_bps_sequential_sum":dd,
-      "fee_bps_per_side":FEE_SIDE_BPS,"slippage_bps_per_side":SLIP_SIDE_BPS,"funding_records":len(funding),
+      "fee_bps_per_side":FEE_SIDE_BPS,"slippage_bps_per_side":SLIP_SIDE_BPS,"funding_source":"OKX V5 public funding-rate-history","funding_records":len(funding),
       "entry_exit_timeframe":"1h (same as public Apps Script); 5-minute trigger is polling cadence only",
       "exit_rule":"Source state machine: stop-first, gap-aware stop, target, then 24 completed-bar time exit",
       "end_state":"Open positions and pending orders at end are not force-closed, matching live engine behavior"}
