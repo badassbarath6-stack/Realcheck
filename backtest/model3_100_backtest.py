@@ -215,9 +215,11 @@ def load_funding():
     params = {"module":"3","instType":"SWAP","instFamilyList":"BTC-USDT",
               "dateAggrType":"monthly","begin":str(archive_begin),"end":str(archive_end)}
     listing = okx_get("/api/v5/public/market-data-history", params)
-    details = listing.get("details") if isinstance(listing, dict) else None
+    # OKX currently wraps the catalogue as data: [ { details: [...] } ].
+    data = listing if isinstance(listing, list) else listing.get("data")
+    details = data[0].get("details") if isinstance(data, list) and data and isinstance(data[0], dict) else None
     if not isinstance(details, list):
-        raise RuntimeError(f"OKX historical funding archive response missing data.details: {listing}")
+        raise RuntimeError(f"OKX historical funding archive response missing data[0].details: {listing}")
     archives = {}
     for detail in details:
         for item in detail.get("groupDetails", []):
