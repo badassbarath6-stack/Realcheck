@@ -3,6 +3,13 @@ on:
   push:
     branches:
       - fix/top100-single-alert-architecture
+      - research/mtf-top100-two-year
+    paths:
+      - "cloudflare/**"
+      - "config/**"
+      - "tests/**"
+      - "package.json"
+      - ".github/workflows/verify.yml"
   pull_request:
     branches:
       - main
