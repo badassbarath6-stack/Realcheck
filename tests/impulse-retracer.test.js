@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { STRATEGIES } from "../config/strategies.js";
 import {
   selectLiveHour,
+  buildFormingHour,
   detectImpulse,
   indicatorSnapshot,
   completedMinuteBars,
@@ -240,4 +241,18 @@ test("first eligible M1 candle is processed on the minute immediately after impu
     strategies:[{id:"IR-T001",rank:1,retracement:0.75,rr:2}]
   });
   assert.equal(data.get("pending").length,1);
+});
+
+test("forming H1 is reconstructed from completed M1 bars plus current M1 open",()=>{
+  const minutes=[
+    {openTime:3600000,closeTime:3659999,open:100,high:105,low:99,close:104,volume:1},
+    {openTime:3660000,closeTime:3719999,open:104,high:110,low:103,close:108,volume:2},
+    {openTime:3720000,closeTime:3779999,open:107,high:109,low:106,close:108,volume:0}
+  ];
+  const forming=buildFormingHour(minutes,3725000,{open:100});
+  assert.equal(forming.openTime,3600000);
+  assert.equal(forming.open,100);
+  assert.equal(forming.high,110);
+  assert.equal(forming.low,99);
+  assert.equal(forming.close,107);
 });
