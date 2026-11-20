@@ -57,7 +57,8 @@ async function telegramAlert(env, selected) {
   const lines=[
     "IMPULSE RETRACER",selected.symbol+" | "+selected.direction,
     "Config: "+selected.configId+" | PF: "+selected.pf.toFixed(3),
-    "Impulse close: "+new Date(selected.impulseCloseTime).toISOString(),
+    "Impulse candle opened: "+new Date(selected.impulseOpenTime).toISOString(),
+    "Impulse detected: "+new Date(selected.impulseDetectedAt).toISOString(),
     "Alert batch: "+new Date(selected.alertTime).toISOString(),
     "Trigger reference (not a fill): "+selected.entryReference,
     "Retracement: "+(selected.depth*100).toFixed(1)+"%",
