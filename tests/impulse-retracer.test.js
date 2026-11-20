@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectLiveHour, completedMinuteBars, ImpulseState } from "../cloudflare/src/worker.js";
+import { selectLiveHour, completedMinuteBars, structuralTradePlan, ImpulseState } from "../cloudflare/src/worker.js";
 
 test("minute polling selects the currently forming hourly candle",()=>{
   const bars=[
@@ -24,13 +24,15 @@ test("a setup can process M1 candles immediately after detection, before H1 clos
   await state.processCandle({symbol:"BTCUSDT",candle:{openTime:180000,closeTime:239999,high:190,low:160,close:180},strategies:[{id:"IR-A01",minRetrace:0.25,maxRetrace:0.62,confirmationLevel:0.5}]});
   assert.equal(data.get("setups")["BTCUSDT:IR-A01:0"].lastCandleTime,180000);
 });
-test("long structural stop is exactly 1x distance to impulse low",()=>{
-  const entry=160, structuralLow=100, multiplier=1.0;
-  const stop=entry-(entry-structuralLow)*multiplier;
-  assert.equal(stop,100);
+test("long structural stop is 1x and target is 5R",()=>{
+  const plan=structuralTradePlan(160,{direction:"LONG",impulseLow:100,impulseHigh:200},{structuralStopMultiplier:1,targetR:5});
+  assert.equal(plan.stop,100);
+  assert.equal(plan.target,460);
+  assert.equal(plan.risk,60);
 });
-test("short structural stop is exactly 1x distance to impulse high",()=>{
-  const entry=140, structuralHigh=200, multiplier=1.0;
-  const stop=entry+(structuralHigh-entry)*multiplier;
-  assert.equal(stop,200);
+test("short structural stop is 1x and target is 5R",()=>{
+  const plan=structuralTradePlan(140,{direction:"SHORT",impulseLow:100,impulseHigh:200},{structuralStopMultiplier:1,targetR:5});
+  assert.equal(plan.stop,200);
+  assert.equal(plan.target,-160);
+  assert.equal(plan.risk,60);
 });
