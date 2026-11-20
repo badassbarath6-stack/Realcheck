@@ -5,7 +5,7 @@ import {
   selectLiveHour,
   buildFormingHour,
   detectImpulse,
-  indicatorSnapshot,
+  indicatorSnapshot,\n  wilder,
   completedMinuteBars,
   latestCompletedMinuteBar,
   structuralTradePlan,
@@ -255,4 +255,22 @@ test("forming H1 is reconstructed from completed M1 bars plus current M1 open",(
   assert.equal(forming.high,110);
   assert.equal(forming.low,99);
   assert.equal(forming.close,107);
+});
+
+
+test("Wilder smoothing seeds with the SMA of the first full period",()=>{
+  const actual=wilder([1,2,3,4,5],3);
+  assert.ok(Math.abs(actual-(3*2+5)/3)<1e-12);
+  assert.equal(wilder([1,2],3),null);
+});
+test("Wilder ATR, ADX and RSI snapshots use a completed-period seed",()=>{
+  const history=Array.from({length:60},(_,i)=>({
+    openTime:i*3600000,closeTime:(i+1)*3600000-1,
+    open:100+i,high:102+i,low:99+i,close:101+i
+  }));
+  const current={openTime:60*3600000,closeTime:61*3600000-1,open:160,high:165,low:159,close:164};
+  const ind=indicatorSnapshot(history,current,[14,20,25]);
+  assert.ok(Number.isFinite(ind.atrPrior[14]) && ind.atrPrior[14]>0);
+  assert.ok(Number.isFinite(ind.adx));
+  assert.ok(Number.isFinite(ind.rsi));
 });
