@@ -29,8 +29,9 @@ These factors can be assessed only after the raw impulse configurations have bee
 - Preserve the live impulse-retracer lifecycle: forming-candle impulse detection, retained pending setups, M1 retracement trigger, next-M1-open simulated fill, and one alert per symbol/timeframe/impulse.
 - Candidate configurations remain independently tracked until their setup expires. If several configurations trigger on the same M1 minute for the same symbol/timeframe/impulse, select among only those simultaneous contenders using training-period PF. Never compare candidates that triggered on different minutes. A sole contender bypasses PF gating.
 - Pending expiry is three complete bars of that configuration's own impulse timeframe: the impulse candle plus the next three complete timeframe bars; expire at the following timeframe-bar open. This must be tested for every timeframe.
-- Structural stop remains fixed at the opposite extreme of the impulse candle: long stop at impulse low; short stop at impulse high. No stop-buffer search in this phase.
-- Target is fixed at 5R. Do not optimize RR in this phase.
+- Stop-loss (SL) is anchored to the opposite extreme of the impulse candle, with a configurable ATR buffer beyond that extreme. Search buffer values: 0.0, 0.2, 0.4, 0.6, 0.8 and 1.0 × the prior completed same-timeframe ATR. For a long, SL is below the impulse low; for a short, SL is above the impulse high.
+- Take-profit (TP) is calculated from the actual entry-to-SL risk distance. Search RR targets: 1.2R, 1.5R, 2.0R, 2.5R, 3.0R and 4.0R. Each configuration must use its own SL buffer and RR consistently in candidate geometry, fill validation and trade simulation.
+- Reject invalid geometry (non-positive risk, stop on the wrong side of entry, or target on the wrong side of entry). Do not silently substitute a different SL or RR.
 - No intrabar look-ahead. If stop and target are touched in the same M1 candle, stop-first. Adverse stop gaps fill at the candle open.
 - Apply the existing execution-cost model consistently: 5 bps fee per side, and 2 bps / 7 bps slippage per side stress scenarios. Include official Binance USD-M funding where archive coverage is available; disclose any gaps.
 - Correct Wilder SMA seed and recurrence for ATR. ATR is calculated only on the same timeframe as the impulse detector, using prior completed candles. Do not add RSI/ADX calculations to this phase.
@@ -48,9 +49,11 @@ These factors can be assessed only after the raw impulse configurations have bee
 - Same-timeframe ATR period: 10, 14, 20, 28.
 - Impulse threshold: 2.0, 2.2, 2.4, 2.6, 2.8, 3.0 × prior completed same-timeframe ATR.
 - Retracement level: 61.8%, 66.7%, 70.7%, 75.0%, 78.6%, 82.0%.
-- Fixed: structural opposite-impulse-extreme stop, 5R target, three-bar pending expiry.
+- SL buffer beyond the structural opposite impulse extreme: 0.0, 0.2, 0.4, 0.6, 0.8, 1.0 × prior completed same-timeframe ATR.
+- TP/RR: 1.2R, 1.5R, 2.0R, 2.5R, 3.0R, 4.0R.
+- Pending expiry: fixed at three complete bars of the configuration's own impulse timeframe.
 
-This is 144 raw parameter combinations per timeframe before symbol-specific performance evaluation. Do not silently add or prune factors. If runtime requires batching, partition the complete grid deterministically and record each batch and its completion status.
+This is 5,184 raw parameter combinations per timeframe (4 × 6 × 6 × 6 × 6), or 31,104 across all six timeframes before symbol-specific performance evaluation. Do not silently add or prune factors. If runtime requires batching, partition the complete grid deterministically and record each batch and its completion status.
 
 ## Selection and reporting
 - Evaluate configurations independently for training and validation. Apply one-alert-per-impulse selection with same-minute-only PF competition.
@@ -73,7 +76,7 @@ This is 144 raw parameter combinations per timeframe before symbol-specific perf
 1. Tests prove independent forming-candle impulse detection on all six timeframes, using only information available at each minute.
 2. Tests prove same-timeframe ATR, retracement levels, M1 trigger and next-M1-open fill timing.
 3. Tests prove no RSI, ADX, MTF confirmation, candle-body, volume, EMA, session or other excluded filter is applied.
-4. Tests prove separate per-timeframe setup expiry, one-alert-per-impulse, same-minute-only PF competition, single-candidate bypass, stop-first and adverse-gap handling.
+4. Tests prove each SL buffer and RR value changes actual stop/target prices and is respected by candidate geometry, fills and trade simulation; also prove separate per-timeframe setup expiry, one-alert-per-impulse, same-minute-only PF competition, single-candidate bypass, stop-first and adverse-gap handling.
 5. Wilder ATR initialization and warmup are independently verified.
 6. Both assets and all six timeframes complete the full 144-combination grid; no partial output may be labelled complete.
 7. Final OOS remains untouched until validation rankings are frozen. No live configuration or production PF registry is changed.
