@@ -22,6 +22,17 @@ function atr(bars, period) {
 }
 export function selectLiveHour(hourly, now) { return hourly.filter(x=>x.openTime<=now).at(-1) || null; }
 export function completedMinuteBars(minutes, now) { return minutes.filter(x=>x.closeTime<now); }
+export function structuralTradePlan(entry, setup, cfg) {
+  const multiplier=cfg.structuralStopMultiplier ?? 1.0;
+  const targetR=cfg.targetR ?? 5.0;
+  const stop=setup.direction==="LONG"
+    ? entry-(entry-setup.impulseLow)*multiplier
+    : entry+(setup.impulseHigh-entry)*multiplier;
+  const risk=Math.abs(entry-stop);
+  if (!(risk>0)) return null;
+  const target=setup.direction==="LONG" ? entry+risk*targetR : entry-risk*targetR;
+  return {stop,target,risk,stopMultiplier:multiplier,targetR};
+}
 function detectImpulse(bar, history, cfg) {
   const volatility=atr(history,cfg.atrPeriod);
   if (!volatility || volatility<=0) return null;
@@ -63,6 +74,8 @@ async function telegramAlert(env, selected) {
     "Impulse detected: "+new Date(selected.impulseDetectedAt).toISOString(),
     "Alert batch: "+new Date(selected.alertTime).toISOString(),
     "Trigger reference (not a fill): "+selected.entryReference,
+    "Structural SL (1x): "+selected.stop,
+    "Target ("+selected.targetR+"R): "+selected.target,
     "Retracement: "+(selected.depth*100).toFixed(1)+"%",
     "Use a fresh quote after this alert; never backfill the earlier trigger price."
   ];
@@ -159,7 +172,9 @@ export class ImpulseState {
       if (result&&result.trigger&&!s.triggered) {
         const candidateId=key+":"+bar.openTime;
         if (!seen[candidateId]) {
-          pending.push({candidateId,symbol:s.symbol,configId:s.configId,direction:s.direction,impulseOpenTime:s.impulseOpenTime,impulseDetectedAt:s.createdAt,triggerTime:bar.closeTime,entryReference:result.entryReference,depth:result.depth});
+          const plan=structuralTradePlan(result.entryReference,s,cfg);
+          if (!plan) continue;
+          pending.push({candidateId,symbol:s.symbol,configId:s.configId,direction:s.direction,impulseOpenTime:s.impulseOpenTime,impulseDetectedAt:s.createdAt,triggerTime:bar.closeTime,entryReference:result.entryReference,depth:result.depth,...plan});
           seen[candidateId]=true;s.triggered=true;changed=true;
         }
       }
