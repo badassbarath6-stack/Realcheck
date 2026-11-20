@@ -66,6 +66,22 @@ export function completedMinuteBars(minutes, now) {
 export function latestCompletedMinuteBar(minutes, now) {
   return completedMinuteBars(minutes,now).at(-1) || null;
 }
+export function buildFormingHour(minutes,now,fallback) {
+  const hourOpen=Math.floor(now/3600000)*3600000;
+  const completed=completedMinuteBars(minutes,now).filter(x=>x.openTime>=hourOpen&&x.openTime<hourOpen+3600000);
+  const current=minutes.find(x=>x.openTime===Math.floor(now/60000)*60000)||null;
+  const open=completed[0]?.open??current?.open??fallback?.open;
+  if(open===undefined)return null;
+  const highs=completed.map(x=>x.high);
+  const lows=completed.map(x=>x.low);
+  if(current){highs.push(current.open);lows.push(current.open);}
+  const close=current?.open??completed.at(-1)?.close??open;
+  return {
+    openTime:hourOpen,closeTime:hourOpen+3600000-1,
+    open,high:Math.max(open,...highs),low:Math.min(open,...lows),close,
+    volume:completed.reduce((sum,x)=>sum+x.volume,0)
+  };
+}
 export function impulseGroupKey(symbol, impulseOpenTime) {
   return symbol+":"+impulseOpenTime;
 }
@@ -177,11 +193,13 @@ async function runMinute(now,env) {
         getKlines(symbol,"1m",60,env.BINANCE_API_BASE)
       ]);
       const completedHours=hourly.filter(x=>x.closeTime<now);
-      const liveHour=selectLiveHour(hourly,now);
+      const exchangeLiveHour=selectLiveHour(hourly,now);
+      const liveHour=buildFormingHour(minuteHistory,now,exchangeLiveHour);
       const latestMinute=latestCompletedMinuteBar(minuteHistory,now);
       if (completedHours.length<Math.max(...configs.map(x=>x.atrPeriod))+1 || !liveHour || !latestMinute) continue;
 
-      // Indicators are recalculated against the forming H1 snapshot on every M1 execution.
+      // Reconstruct the forming H1 from completed M1 bars plus the current M1 open.
+      // This is reproducible in backtests and avoids using unknown future ticks.
       const indicators=indicatorSnapshot(completedHours,liveHour,[...new Set(configs.map(x=>x.atrPeriod))]);
       // On every one-minute invocation, evaluate the current H1 candle for all 100 configs.
       for (const cfg of configs) {
