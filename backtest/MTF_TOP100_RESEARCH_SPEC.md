@@ -38,7 +38,7 @@ Core:
 Only additional factor:
 - MTF confirmation timeframe: NONE (baseline), 5m, 15m, 1h, 4h.
 - Confirmation rule: latest fully completed candle on the selected timeframe must agree directionally with the forming H1 impulse. For 1h use the current forming H1 direction, not a future close. For 4h use the latest fully completed H4 candle (do not use future H4 close). For M5/M15, use the latest fully completed candle available at the current M1 decision time.
-- No candle-body threshold. No volume, EMA, RSI, session, or any other added confirmation factor. RSI is not a search dimension in this study; do not silently add it as a gate.
+- No candle-body threshold. No volume, EMA, session, or any other added confirmation factor. Preserve the existing live RSI-mode behavior as-is (including its configured none/exact/loose semantics); do not invent new RSI thresholds or add a new RSI dimension to this search.
 
 ## Search procedure and selection
 - Stage the search to avoid a combinatorial explosion: evaluate core-factor candidates first, then add the single MTF dimension. Use deterministic exhaustive/covering combinations and record the exact generated search-space size and every pruning rule.
