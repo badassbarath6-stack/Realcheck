@@ -288,56 +288,6 @@ def load_configs():
     if len(configs)!=100 or [x["rank"] for x in configs]!=list(range(1,101)):raise RuntimeError("Expected exact Top-100 ranks 1..100")
     if any(x["rr"]!=2 or x["timeframe"]!="1h" for x in configs):raise RuntimeError("Top-100 RR/timeframe mismatch")
     return configs
-def run_symbol(symbol,configs,start_ms,end_ms,split_ms):
-    warm=start_ms-60*DAY
-    m1,checks=load_m1(symbol,warm,end_ms)
-    ind=h1_indicators(m1); ts,o,h,l,c=m1
-    candidates=[]; setups=0; first_h=np.searchsorted(ind["ts"],start_ms,side="left")
-    for hi in range(max(2,first_h),len(ind["ts"])):
-        hour=int(ind["ts"][hi])
-        if hour>=end_ms:break
-        base_i=hi*60
-        if base_i>=len(ts):break
-        prev_close=float(ind["close"][hi-1])
-        prev_high=float(ind["high"][hi-1]); prev_low=float(ind["low"][hi-1])
-        seen=set()
-        for off in range(60):
-            mi=base_i+off
-            if mi>=len(ts) or ts[mi]>=end_ms:break
-            if off==0:
-                ph=max(float(ind["open"][hi]),float(o[mi])); pl=min(float(ind["open"][hi]),float(o[mi])); pc=float(o[mi])
-            else:
-                ph=max(float(ind["open"][hi]),float(np.max(h[base_i:mi])),float(o[mi]))
-                pl=min(float(ind["open"][hi]),float(np.min(l[base_i:mi])),float(o[mi]))
-                pc=float(o[mi])
-            side=1 if pc>float(ind["open"][hi]) else (-1 if pc<float(ind["open"][hi]) else 0)
-            if not side:continue
-            vals=partial_ind(ind,hi,ph,pl,pc)
-            if vals is None:continue
-            span=ph-pl
-            for cfg in configs:
-                if cfg["rank"] in seen:continue
-                if not impulse_ok(cfg,side,span,vals):continue
-                seen.add(cfg["rank"]); setups+=1
-                level=ph-cfg["retracement"]*span if side==1 else pl+cfg["retracement"]*span
-                stop=pl if side==1 else ph
-                setup={"symbol":symbol,"configId":cfg["id"],"rank":cfg["rank"],"side":side,
-                    "impulseOpenTime":hour,"detectedAt":int(ts[mi]),"impulseHigh":ph,"impulseLow":pl,
-                    "impulseRange":span,"level":level,"stop":stop,"pendingBars":cfg["pendingBars"]}
-                expiry=hour+(cfg["pendingBars"]+1)*HOUR
-                hit=first_entry(setup,m1,expiry)
-                if hit:candidates.append(hit)
-        if hi%5000==0:print(f"{symbol}: scanned {hi-first_h:,} H1 candles; setups={setups:,}; candidates={len(candidates):,}",flush=True)
-    # Independent configuration trade streams are used only to estimate PF rankings.
-    per_config=[]; train_pf={}; oos_config={}
-    outcomes={}
-    for idx,cand in enumerate(candidates):
-        if cand["detectedAt"]<split_ms:
-            tr=simulate(cand,m1,(np.array([],dtype=np.int64),np.array([0.0])),2.0,split_ms)
-            # Funding is loaded separately below; defer true simulation to caller.
-        if idx%5000==0 and idx:print(f"{symbol}: candidate entries {idx:,}/{len(candidates):,}",flush=True)
-    return m1,checks,candidates,ind
-
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--start",default="2021-11-19")
@@ -364,11 +314,12 @@ def main():
             for off in range(60):
                 mi=base_i+off
                 if mi>=len(ts) or ts[mi]>=end_ms:break
-                if off==0: ph=float(ind["open"][hi]); pl=ph; pc=ph
+                if off==0:
+                    ph=max(float(ind["open"][hi]),float(o[mi])); pl=min(float(ind["open"][hi]),float(o[mi])); pc=float(o[mi])
                 else:
-                    ph=max(float(ind["open"][hi]),float(np.max(h[base_i:mi])))
-                    pl=min(float(ind["open"][hi]),float(np.min(l[base_i:mi])))
-                    pc=float(c[mi-1])
+                    ph=max(float(ind["open"][hi]),float(np.max(h[base_i:mi])),float(o[mi]))
+                    pl=min(float(ind["open"][hi]),float(np.min(l[base_i:mi])),float(o[mi]))
+                    pc=float(o[mi])
                 side=1 if pc>float(ind["open"][hi]) else (-1 if pc<float(ind["open"][hi]) else 0)
                 if not side:continue
                 vals=partial_ind(ind,hi,ph,pl,pc)
