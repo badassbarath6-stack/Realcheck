@@ -19,7 +19,7 @@ function makeState() {
 function candidate(configId,rank,impulseKey="BTCUSDT:3600000",triggerMinute=3660000) {
   return {
     candidateId:impulseKey+":"+configId+":"+triggerMinute,
-    impulseKey,triggerMinute,symbol:"BTCUSDT",configId,rank,direction:"LONG",
+    impulseKey,triggerMinute,symbol,configId,rank,direction:"LONG",
     impulseOpenTime:3600000,impulseDetectedAt:3660000,triggerTime:triggerMinute+59999,
     entryReference:100,depth:0.75,stop:90,target:120,risk:10,targetR:2
   };
@@ -107,4 +107,11 @@ test("structural stop is 1x and Top-100 RR is applied as 2R",()=>{
   assert.equal(plan.target,280);
   assert.equal(plan.risk,60);
   assert.equal(plan.targetR,2);
+});
+
+test("the active model contains exactly the 100 approved ranked configurations",()=>{
+  assert.equal(STRATEGIES.length,100);
+  assert.deepEqual(STRATEGIES.map(x=>x.rank),Array.from({length:100},(_,i)=>i+1));
+  assert.equal(new Set(STRATEGIES.map(x=>x.id)).size,100);
+  assert.ok(STRATEGIES.every(x=>x.timeframe==="1h" && x.rr===2));
 });
