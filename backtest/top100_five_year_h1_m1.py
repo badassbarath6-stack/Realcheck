@@ -304,11 +304,12 @@ def run_symbol(symbol,configs,start_ms,end_ms,split_ms):
         for off in range(60):
             mi=base_i+off
             if mi>=len(ts) or ts[mi]>=end_ms:break
-            if off==0: ph=float(ind["open"][hi]); pl=ph; pc=ph
+            if off==0:
+                ph=max(float(ind["open"][hi]),float(o[mi])); pl=min(float(ind["open"][hi]),float(o[mi])); pc=float(o[mi])
             else:
-                ph=max(float(ind["open"][hi]),float(np.max(h[base_i:mi])))
-                pl=min(float(ind["open"][hi]),float(np.min(l[base_i:mi])))
-                pc=float(c[mi-1])
+                ph=max(float(ind["open"][hi]),float(np.max(h[base_i:mi])),float(o[mi]))
+                pl=min(float(ind["open"][hi]),float(np.min(l[base_i:mi])),float(o[mi]))
+                pc=float(o[mi])
             side=1 if pc>float(ind["open"][hi]) else (-1 if pc<float(ind["open"][hi]) else 0)
             if not side:continue
             vals=partial_ind(ind,hi,ph,pl,pc)
