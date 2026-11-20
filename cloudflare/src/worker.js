@@ -87,7 +87,7 @@ async function runMinute(now,env) {
     try {
       const pair=await Promise.all([
         getKlines(symbol,"1h",80,env.BINANCE_API_BASE),
-        getKlines(symbol,"1m",8,env.BINANCE_API_BASE)
+        getKlines(symbol,"1m",60,env.BINANCE_API_BASE)
       ]);
       const hourly=pair[0].filter(x=>x.closeTime<now);
       const minutes=pair[1].filter(x=>x.closeTime<now);
@@ -97,7 +97,7 @@ async function runMinute(now,env) {
         const impulse=detectImpulse(lastHour,hourly.slice(0,-1),cfg);
         if (impulse) await state.fetch("https://state/setup",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({symbol,configId:cfg.id,...impulse,createdAt:now})});
       }
-      for (const m of minutes.slice(-2)) {
+      for (const m of minutes) {
         await state.fetch("https://state/candle",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({symbol,candle:m,strategies:configs})});
       }
     } catch(e) { errors.push({symbol,error:String(e.message||e)}); }
@@ -164,14 +164,17 @@ export class ImpulseState {
   }
   async flush(input) {
     const pending=await this.read("pending",[]);
-    const eligible=pending.filter(c=>Number.isFinite(Number(input.rankings[c.configId]?.profitFactor))&&Number(input.rankings[c.configId].profitFactor)>0&&input.rankings[c.configId].validated===true);
+    const batchStart=Math.floor(input.now/300000)*300000-300000;
+    const inBatch=pending.filter(c=>c.triggerTime>batchStart && c.triggerTime<=input.now);
+    const eligible=inBatch.filter(c=>Number.isFinite(Number(input.rankings[c.configId]?.profitFactor))&&Number(input.rankings[c.configId].profitFactor)>0&&input.rankings[c.configId].validated===true);
     eligible.sort((a,b)=>{
       const pa=input.rankings[a.configId],pb=input.rankings[b.configId];
       return pb.profitFactor-pa.profitFactor||(pb.trades||0)-(pa.trades||0)||a.triggerTime-b.triggerTime;
     });
-    const selected=eligible[0]||null, consumed=new Set(eligible.map(c=>c.candidateId));
-    await this.ctx.storage.put("pending",pending.filter(c=>!consumed.has(c.candidateId)));
-    if (!selected) return json({selected:null,queued:pending.length,reason:"NO_PF_VALIDATED_CONFIGURATION"});
+    const selected=eligible[0]||null;
+    // Drop the completed five-minute window, including unranked candidates; never carry stale triggers forward.
+    await this.ctx.storage.put("pending",pending.filter(c=>c.triggerTime>input.now));
+    if (!selected) return json({selected:null,queued:inBatch.length,reason:"NO_PF_VALIDATED_CONFIGURATION"});
     return json({selected:{...selected,pf:input.rankings[selected.configId].profitFactor,alertTime:input.now}});
   }
   async alertResult(input) {
