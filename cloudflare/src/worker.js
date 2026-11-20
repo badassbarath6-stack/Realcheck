@@ -355,7 +355,7 @@ export class ImpulseState {
         winner={...candidates[0],pf:null};
       } else {
         const scored=candidates.map(c=>({candidate:c,ranking:input.rankings[c.configId]}));
-        if (scored.some(x=>!x.ranking || x.ranking.validated!==true || !Number.isFinite(Number(x.ranking.profitFactor)) || Number(x.ranking.profitFactor)<=0)) {
+        if (scored.some(x=>!x.ranking || x.ranking.validated!==true || !Number.isFinite(Number(x.ranking.profitFactor)) || Number(x.ranking.profitFactor)<0)) {
           skipped.push({impulseKey,triggerMinute:earliestMinute,reason:"MULTIPLE_CONFIGS_REQUIRE_VALIDATED_PF_FOR_EVERY_CANDIDATE",configIds:candidates.map(c=>c.configId)});
           continue;
         }
