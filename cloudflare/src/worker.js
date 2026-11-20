@@ -23,7 +23,7 @@ function wilder(values, period) {
   }
   return count>=period?value:null;
 }
-function indicatorSnapshot(history,current,periods) {
+export function indicatorSnapshot(history,current,periods) {
   const bars=[...history,current], n=bars.length;
   const trValues=Array(n).fill(null), plus=Array(n).fill(null), minus=Array(n).fill(null);
   const gains=Array(n).fill(null), losses=Array(n).fill(null);
