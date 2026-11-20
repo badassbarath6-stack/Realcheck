@@ -14,14 +14,29 @@ function candle(k) {
 function tr(c, previous) {
   return Math.max(c.high-c.low, Math.abs(c.high-previous.close), Math.abs(c.low-previous.close));
 }
-function wilder(values, period) {
-  let value=null, count=0;
-  for (const x of values) {
-    if (x===null || !Number.isFinite(x)) continue;
-    value=value===null?x:((value*(period-1))+x)/period;
-    count++;
+export function wilderSeries(values, period) {
+  const out=Array(values.length).fill(null);
+  let seed=[], value=null;
+  for (let i=0;i<values.length;i++) {
+    const x=values[i];
+    if (x===null || x===undefined || !Number.isFinite(x)) continue;
+    if (value===null) {
+      seed.push(x);
+      if (seed.length===period) {
+        value=seed.reduce((sum,v)=>sum+v,0)/period;
+        out[i]=value;
+      }
+    } else {
+      value=((value*(period-1))+x)/period;
+      out[i]=value;
+    }
   }
-  return count>=period?value:null;
+  return out;
+}
+export function wilder(values, period) {
+  const series=wilderSeries(values,period);
+  for (let i=series.length-1;i>=0;i--) if (series[i]!==null) return series[i];
+  return null;
 }
 export function indicatorSnapshot(history,current,periods) {
   const bars=[...history,current], n=bars.length;
@@ -36,25 +51,19 @@ export function indicatorSnapshot(history,current,periods) {
     const delta=b.close-p.close;
     gains[i]=Math.max(delta,0);losses[i]=Math.max(-delta,0);
   }
+  const last=values=>{for(let i=values.length-1;i>=0;i--)if(values[i]!==null)return values[i];return null;};
   const atrPrior={};
-  for(const period of periods) atrPrior[period]=wilder(trValues.slice(0,-1),period);
-  const avgGain=wilder(gains,14),avgLoss=wilder(losses,14);
+  for(const period of periods) atrPrior[period]=last(wilderSeries(trValues.slice(0,-1),period));
+  const avgGain=last(wilderSeries(gains,14)),avgLoss=last(wilderSeries(losses,14));
   const rsi=avgGain===null||avgLoss===null?null:(avgLoss===0?100:100-100/(1+avgGain/avgLoss));
-  const atr14=wilder(trValues,14),pdm=wilder(plus,14),mdm=wilder(minus,14);
-  let adx=null;
-  if(atr14!==null&&pdm!==null&&mdm!==null&&atr14>0){
-    const pdi=100*pdm/atr14,mdi=100*mdm/atr14,den=pdi+mdi;
-    const dx=den===0?null:100*Math.abs(pdi-mdi)/den;
-    const priorDx=[];
-    for(let i=1;i<n-1;i++){
-      const a=wilder(trValues.slice(0,i+1),14);
-      const p=wilder(plus.slice(0,i+1),14),m=wilder(minus.slice(0,i+1),14);
-      if(a===null||p===null||m===null||a===0){priorDx.push(null);continue;}
-      const pi=100*p/a,mi=100*m/a,dd=pi+mi;
-      priorDx.push(dd===0?null:100*Math.abs(pi-mi)/dd);
-    }
-    adx=wilder([...priorDx,dx],14);
+  const atr14=wilderSeries(trValues,14),pdm=wilderSeries(plus,14),mdm=wilderSeries(minus,14);
+  const dx=Array(n).fill(null);
+  for(let i=0;i<n;i++){
+    if(atr14[i]===null||pdm[i]===null||mdm[i]===null||atr14[i]<=0)continue;
+    const pdi=100*pdm[i]/atr14[i],mdi=100*mdm[i]/atr14[i],den=pdi+mdi;
+    if(den>0)dx[i]=100*Math.abs(pdi-mdi)/den;
   }
+  const adx=last(wilderSeries(dx,14));
   return {atrPrior,adx,rsi};
 }
 export function selectLiveHour(hourly, now) {
@@ -189,7 +198,7 @@ async function runMinute(now,env) {
   for (const symbol of symbols) {
     try {
       const [hourly,minuteHistory]=await Promise.all([
-        getKlines(symbol,"1h",100,env.BINANCE_API_BASE),
+        getKlines(symbol,"1h",1440,env.BINANCE_API_BASE),
         getKlines(symbol,"1m",60,env.BINANCE_API_BASE)
       ]);
       const completedHours=hourly.filter(x=>x.closeTime<now);
