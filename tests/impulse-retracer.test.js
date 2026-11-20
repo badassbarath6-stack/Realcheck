@@ -261,7 +261,7 @@ test("forming H1 is reconstructed from completed M1 bars plus current M1 open",(
 
 test("Wilder smoothing seeds with the SMA of the first full period",()=>{
   const actual=wilder([1,2,3,4,5],3);
-  assert.ok(Math.abs(actual-(3*2+5)/3)<1e-12);
+  assert.ok(Math.abs(actual-31/9)<1e-12);
   assert.equal(wilder([1,2],3),null);
 });
 test("Wilder ATR, ADX and RSI snapshots use a completed-period seed",()=>{
