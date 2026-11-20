@@ -1,0 +1,86 @@
+name: Impulse Retracer Full Two-Year Backtest
+on:
+  push:
+    branches:
+      - research/mtf-top100-two-year
+    paths:
+      - "research/impulse_retracer_backtest.py"
+      - "research/aggregate_results.py"
+      - "tests/research/**"
+      - ".github/workflows/impulse-retracer-full-backtest.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/mtf-top100-two-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m py_compile research/impulse_retracer_backtest.py research/aggregate_results.py
+      - run: python -m unittest discover -s tests/research -v
+      - run: python research/impulse_retracer_backtest.py --help
+  backtest:
+    needs: validate
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        symbol: [BTCUSDT, ETHUSDT]
+        timeframe: [5m, 15m, 30m, 1h, 2h, 4h]
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/mtf-top100-two-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run complete pair/timeframe sweep
+        run: |
+          python research/impulse_retracer_backtest.py \
+            --symbol "${{ matrix.symbol }}" \
+            --timeframe "${{ matrix.timeframe }}" \
+            --data-dir /tmp/binance \
+            --output-dir research-output
+      - name: Verify required output files
+        run: |
+          test -s research-output/${{ matrix.symbol }}_${{ matrix.timeframe }}_manifest.json
+          test -s research-output/${{ matrix.symbol }}_${{ matrix.timeframe }}_all_config_metrics.csv
+          test -s research-output/${{ matrix.symbol }}_${{ matrix.timeframe }}_validation_ranked.csv
+          test -s research-output/${{ matrix.symbol }}_${{ matrix.timeframe }}_selected_trades.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: impulse-${{ matrix.symbol }}-${{ matrix.timeframe }}
+          path: research-output/
+          if-no-files-found: error
+          retention-days: 30
+  aggregate:
+    needs: backtest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/mtf-top100-two-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: impulse-*
+          path: research-output
+          merge-multiple: true
+      - name: Build combined report
+        run: python research/aggregate_results.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: impulse-research-final-report
+          path: research-output/
+          if-no-files-found: error
+          retention-days: 90
