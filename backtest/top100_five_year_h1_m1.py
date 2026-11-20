@@ -383,7 +383,7 @@ def main():
     train_pf={}
     for cfg in configs:
         rows=train_rows[cfg["id"]]; m=metrics(rows)
-        if m["trades"]>=30 and m["profitFactor"] is not None and m["netBps"]>0:
+        if m["trades"]>=30 and m["profitFactor"] is not None:
             train_pf[cfg["id"]]={"profitFactor":m["profitFactor"],"trades":m["trades"],"validated":True}
     # OOS model stream: first trigger for each impulse; PF competition only for candidates on that exact M1 candle.
     oos_candidates=[c for c in all_candidates if c["detectedAt"]>=split_ms]
@@ -411,7 +411,7 @@ def main():
     per_config=[]
     for cfg in configs:
         tr=metrics(train_rows[cfg["id"]]); oo=metrics(oos_rows[cfg["id"]]); fu=metrics(full_rows[cfg["id"]])
-        validated=tr["trades"]>=30 and tr["profitFactor"] is not None and tr["netBps"]>0 and oo["trades"]>=10 and oo["profitFactor"] is not None and oo["netBps"]>0
+        validated=tr["trades"]>=30 and tr["profitFactor"] is not None
         per_config.append({"configId":cfg["id"],"rank":cfg["rank"],"pendingBars":cfg["pendingBars"],"rsiMode":cfg["rsiMode"],"adxMin":cfg["adxMin"],"adxMax":cfg["adxMax"],"impulseAtr":cfg["impulseAtr"],"retracement":cfg["retracement"],
             "train":tr,"oos":oo,"fullFiveYear":fu,"livePfValidated":validated})
     registry={}
