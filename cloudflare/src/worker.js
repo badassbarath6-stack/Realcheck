@@ -299,8 +299,9 @@ export class ImpulseState {
       const bar=input.candle;
       if (!s.active || s.symbol!==input.symbol || bar.openTime<=s.lastCandleTime) continue;
       s.lastCandleTime=bar.openTime;
-      if(bar.openTime>=s.expiresAt){s.active=false;s.expiredAt=bar.openTime;continue;}
+      // Persist every active-setup state transition, including expiry.
       changed=true;
+      if(bar.openTime>=s.expiresAt){s.active=false;s.expiredAt=bar.openTime;continue;}
       if (locks[s.groupKey]) { s.active=false; continue; }
       const cfg=configs[s.configId];
       if (!cfg) continue;
