@@ -16,7 +16,7 @@ import {
 function makeState() {
   const data=new Map();
   const storage={
-    get:async k=>data.get(k),
+    get:async k=>data.has(k)?structuredClone(data.get(k)):undefined,
     put:async(k,v)=>data.set(k,structuredClone(v))
   };
   return {state:new ImpulseState({storage},{}),data};
