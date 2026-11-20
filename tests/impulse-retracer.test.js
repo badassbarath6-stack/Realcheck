@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { STRATEGIES } from "../config/strategies.js";
 import {
   selectLiveHour,
   completedMinuteBars,
@@ -17,6 +18,7 @@ function makeState() {
   return {state:new ImpulseState({storage},{}),data};
 }
 function candidate(configId,rank,impulseKey="BTCUSDT:3600000",triggerMinute=3660000) {
+  const symbol=impulseKey.split(":")[0];
   return {
     candidateId:impulseKey+":"+configId+":"+triggerMinute,
     impulseKey,triggerMinute,symbol,configId,rank,direction:"LONG",
@@ -107,6 +109,13 @@ test("structural stop is 1x and Top-100 RR is applied as 2R",()=>{
   assert.equal(plan.target,280);
   assert.equal(plan.risk,60);
   assert.equal(plan.targetR,2);
+});
+
+test("the active model contains exactly the 100 approved ranked configurations",()=>{
+  assert.equal(STRATEGIES.length,100);
+  assert.deepEqual(STRATEGIES.map(x=>x.rank),Array.from({length:100},(_,i)=>i+1));
+  assert.equal(new Set(STRATEGIES.map(x=>x.id)).size,100);
+  assert.ok(STRATEGIES.every(x=>x.timeframe==="1h" && x.rr===2));
 });
 
 test("the active model contains exactly the 100 approved ranked configurations",()=>{
