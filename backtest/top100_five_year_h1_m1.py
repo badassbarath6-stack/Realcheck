@@ -421,7 +421,7 @@ def main():
         tr=metrics(train_rows[cfg["id"]]); oo=metrics(oos_rows[cfg["id"]]); fu=metrics(full_rows[cfg["id"]])
         validated=tr["trades"]>=30 and tr["profitFactor"] is not None
         per_config.append({"configId":cfg["id"],"rank":cfg["rank"],"pendingBars":cfg["pendingBars"],"rsiMode":cfg["rsiMode"],"adxMin":cfg["adxMin"],"adxMax":cfg["adxMax"],"impulseAtr":cfg["impulseAtr"],"retracement":cfg["retracement"],
-            "train":tr,"oos":oo,"fullFiveYear":fu,"livePfValidated":validated})
+            "train":tr,"oos":oo,"fullPeriod":fu,"livePfValidated":validated})
     registry={}
     for row in per_config:
         if row["train"]["trades"]>=30 and row["train"]["profitFactor"] is not None:
@@ -446,12 +446,17 @@ def main():
         "data":summaries,
         "pfRegistryValidatedConfigs":sum(1 for x in registry.values() if x["validated"]),
         "pfRegistryTotalConfigs":len(registry),
+        "pfRegistryUnvalidatedConfigIds":[x["configId"] for x in per_config if not x["livePfValidated"]],
+        "trainingConfigsPfAbove1":sum(1 for x in per_config if x["train"]["profitFactor"] is not None and x["train"]["profitFactor"]>1),
+        "oosConfigsPfAbove1":sum(1 for x in per_config if x["oos"]["profitFactor"] is not None and x["oos"]["profitFactor"]>1),
+        "oosBySymbol2bps":{symbol:metrics([x for x in model_oos[2.0] if x["symbol"]==symbol]) for symbol in SYMBOLS},
         "oosModel2bps":metrics(model_oos[2.0]),"oosModel7bps":metrics(model_oos[7.0]),
-        "fullFiveYearRetrospective2bps":metrics(model_full[2.0]),"fullFiveYearRetrospective7bps":metrics(model_full[7.0]),
+        "fullPeriodBySymbol2bps":{symbol:metrics([x for x in model_full[2.0] if x["symbol"]==symbol]) for symbol in SYMBOLS},
+        "fullPeriodRetrospective2bps":metrics(model_full[2.0]),"fullPeriodRetrospective7bps":metrics(model_full[7.0]),
         "oosUniqueAlertsSelected":len(selected_oos),"oosCandidates":len(oos_candidates),"oosSkippedImpulses":len(skipped_oos),
         "fullUniqueAlertsSelected":len(selected_full),"fullCandidates":len(all_candidates),"fullSkippedImpulses":len(skipped_full),
         "oosYearly":yearly,"archiveChecksums":{s:symbol_data[s]["checks"] for s in SYMBOLS},
-        "limitations":"The full-five-year retrospective PF ranking uses all five years and is descriptive/in-sample. The 60/40 OOS stream uses only training-period per-config PF for same-minute selection. OOS metrics are the primary validation result."}
+        "limitations":"The full-period retrospective PF ranking uses the entire requested window and is descriptive/in-sample. The 60/40 OOS stream uses only training-period per-config PF for same-minute selection. OOS metrics are the primary validation result."}
     (OUT/"summary.json").write_text(json.dumps(summary,indent=2,allow_nan=False)+"\n")
     print(json.dumps(summary,indent=2),flush=True)
 if __name__=="__main__":main()
