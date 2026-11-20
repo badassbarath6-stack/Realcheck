@@ -124,3 +124,47 @@ test("the active model contains exactly the 100 approved ranked configurations",
   assert.equal(new Set(STRATEGIES.map(x=>x.id)).size,100);
   assert.ok(STRATEGIES.every(x=>x.timeframe==="1h" && x.rr===2));
 });
+
+test("a minute retracement touch completes one configuration and creates an immediate-cycle candidate",async()=>{
+  const {state,data}=makeState();
+  await post(state,"/setup",{
+    symbol:"BTCUSDT",configId:"IR-T001",rank:1,direction:"LONG",
+    range:100,impulseHigh:200,impulseLow:100,impulseOpenTime:3600000,
+    createdAt:3660000,detectedMinute:3660000
+  });
+  await post(state,"/candle",{
+    symbol:"BTCUSDT",
+    candle:{openTime:3720000,closeTime:3779999,high:132,low:124,close:128},
+    strategies:[{id:"IR-T001",rank:1,retracement:0.75,rr:2}]
+  });
+  const pending=data.get("pending");
+  assert.equal(pending.length,1);
+  assert.equal(pending[0].configId,"IR-T001");
+  assert.equal(pending[0].entryReference,125);
+  assert.equal(pending[0].target,175);
+});
+test("two configurations touched by the same M1 candle are compared together by PF",async()=>{
+  const {state,data}=makeState();
+  for (const [configId,rank] of [["IR-T001",1],["IR-T002",2]]) {
+    await post(state,"/setup",{
+      symbol:"BTCUSDT",configId,rank,direction:"LONG",
+      range:100,impulseHigh:200,impulseLow:100,impulseOpenTime:3600000,
+      createdAt:3660000,detectedMinute:3660000
+    });
+  }
+  await post(state,"/candle",{
+    symbol:"BTCUSDT",
+    candle:{openTime:3720000,closeTime:3779999,high:132,low:124,close:128},
+    strategies:[
+      {id:"IR-T001",rank:1,retracement:0.75,rr:2},
+      {id:"IR-T002",rank:2,retracement:0.75,rr:2}
+    ]
+  });
+  assert.equal(data.get("pending").length,2);
+  const result=await post(state,"/flush",{now:3780000,rankings:{
+    "IR-T001":{profitFactor:1.7,trades:100,validated:true},
+    "IR-T002":{profitFactor:1.9,trades:90,validated:true}
+  }});
+  assert.equal(result.selected.length,1);
+  assert.equal(result.selected[0].configId,"IR-T002");
+});
