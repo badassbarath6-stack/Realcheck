@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { STRATEGIES } from "../config/strategies.js";
 import {
-  selectLiveHour,
+  selectLiveHour,\n  detectImpulse,\n  indicatorSnapshot,
   completedMinuteBars,
   latestCompletedMinuteBar,
   structuralTradePlan,
@@ -182,4 +182,60 @@ test("configurations triggered in different M1 minutes are not compared by PF",a
   assert.equal(result.selected.length,1);
   assert.equal(result.selected[0].configId,"IR-T001");
   assert.equal(result.selected[0].pf,null);
+});
+
+test("ADX bounds reject impulses outside each configuration's band",()=>{
+  const history=Array.from({length:40},(_,i)=>({
+    openTime:i*3600000,closeTime:(i+1)*3600000-1,
+    open:100+i,high:102+i,low:99+i,close:101+i
+  }));
+  const current={openTime:40*3600000,closeTime:41*3600000-1,open:140,high:160,low:139,close:159};
+  const ind=indicatorSnapshot(history,current,[14,20,25]);
+  assert.ok(ind.adx!==null);
+  assert.equal(detectImpulse(current,history,{atrPeriod:14,impulseAtr:0.1,adxMin:ind.adx+1,adxMax:ind.adx+5,rsiMode:"none"},ind),null);
+});
+test("RSI exact and loose modes apply directional ranges",()=>{
+  const history=Array.from({length:40},(_,i)=>({
+    openTime:i*3600000,closeTime:(i+1)*3600000-1,
+    open:100+i,high:102+i,low:99+i,close:101+i
+  }));
+  const current={openTime:40*3600000,closeTime:41*3600000-1,open:140,high:160,low:139,close:159};
+  const ind=indicatorSnapshot(history,current,[14,20,25]);
+  const cfg={atrPeriod:14,impulseAtr:0.1,adxMin:0,adxMax:100,rsiMode:"exact"};
+  if(ind.rsi!==null && ind.rsi>70) assert.equal(detectImpulse(current,history,cfg,ind),null);
+  const loose={...cfg,rsiMode:"loose"};
+  if(ind.rsi!==null && ind.rsi>75) assert.equal(detectImpulse(current,history,loose,ind),null);
+});
+test("pending_bars expires at impulse-hour close plus the configured number of H1 bars",async()=>{
+  const {state,data}=makeState();
+  const impulseOpenTime=3600000, detectedMinute=3660000;
+  await post(state,"/setup",{
+    symbol:"BTCUSDT",configId:"IR-T001",rank:1,pendingBars:3,direction:"LONG",
+    range:100,impulseHigh:200,impulseLow:100,impulseOpenTime,
+    createdAt:detectedMinute,detectedMinute
+  });
+  const setups=data.get("setups");
+  const setup=Object.values(setups)[0];
+  assert.equal(setup.expiresAt,impulseOpenTime+4*3600000);
+  await post(state,"/candle",{
+    symbol:"BTCUSDT",candle:{openTime:setup.expiresAt,closeTime:setup.expiresAt+59999,high:150,low:120,close:130},
+    strategies:[{id:"IR-T001",rank:1,retracement:0.75,rr:2}]
+  });
+  assert.equal(Object.values(data.get("setups"))[0].active,false);
+  assert.equal(Object.values(data.get("setups"))[0].expiredAt,setup.expiresAt);
+});
+test("first eligible M1 candle is processed on the minute immediately after impulse detection",async()=>{
+  const {state,data}=makeState();
+  const detectedMinute=3660000;
+  await post(state,"/setup",{
+    symbol:"BTCUSDT",configId:"IR-T001",rank:1,pendingBars:3,direction:"LONG",
+    range:100,impulseHigh:200,impulseLow:100,impulseOpenTime:3600000,
+    createdAt:detectedMinute,detectedMinute
+  });
+  assert.equal(Object.values(data.get("setups"))[0].lastCandleTime,detectedMinute-60000);
+  await post(state,"/candle",{
+    symbol:"BTCUSDT",candle:{openTime:detectedMinute,closeTime:detectedMinute+59999,high:132,low:124,close:128},
+    strategies:[{id:"IR-T001",rank:1,retracement:0.75,rr:2}]
+  });
+  assert.equal(data.get("pending").length,1);
 });
