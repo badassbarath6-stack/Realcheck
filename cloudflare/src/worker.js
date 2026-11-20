@@ -108,7 +108,7 @@ async function telegramAlert(env, selected) {
   return {sent:true};
 }
 export default {
-  async scheduled(event,env,ctx) { ctx.waitUntil(runMinute(event.scheduledTime||Date.now(),env)); },
+  async scheduled(event,env,ctx) { ctx.waitUntil(runMinute(Date.now(),env)); },
   async fetch(request,env) {
     const url=new URL(request.url);
     if (url.pathname==="/health") return json({
@@ -283,16 +283,19 @@ export class ImpulseState {
     }
     const selected=[];
     const skipped=[];
-    for (const [impulseKey,candidates] of groups) {
-      // A group is one symbol + one hourly impulse. Only candidates completed
-      // during this one-minute execution are present in pending.
+    for (const [impulseKey,allCandidates] of groups) {
+      // Never compare configurations whose entry triggers occurred in different
+      // M1 minutes. If invocations overlap, resolve the earliest pending minute;
+      // PF competition is restricted to that exact minute only.
+      const earliestMinute=Math.min(...allCandidates.map(c=>c.triggerMinute));
+      const candidates=allCandidates.filter(c=>c.triggerMinute===earliestMinute);
       let winner=null;
       if (candidates.length===1) {
         winner={...candidates[0],pf:null};
       } else {
         const scored=candidates.map(c=>({candidate:c,ranking:input.rankings[c.configId]}));
         if (scored.some(x=>!x.ranking || x.ranking.validated!==true || !Number.isFinite(Number(x.ranking.profitFactor)) || Number(x.ranking.profitFactor)<=0)) {
-          skipped.push({impulseKey,reason:"MULTIPLE_CONFIGS_REQUIRE_VALIDATED_PF_FOR_EVERY_CANDIDATE",configIds:candidates.map(c=>c.configId)});
+          skipped.push({impulseKey,triggerMinute:earliestMinute,reason:"MULTIPLE_CONFIGS_REQUIRE_VALIDATED_PF_FOR_EVERY_CANDIDATE",configIds:candidates.map(c=>c.configId)});
           continue;
         }
         scored.sort((a,b)=>
