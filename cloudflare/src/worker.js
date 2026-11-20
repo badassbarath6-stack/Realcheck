@@ -90,13 +90,17 @@ async function runMinute(now,env) {
         getKlines(symbol,"1h",80,env.BINANCE_API_BASE),
         getKlines(symbol,"1m",60,env.BINANCE_API_BASE)
       ]);
-      const hourly=pair[0].filter(x=>x.closeTime<now);
+      // Evaluate the currently forming H1 candle on every one-minute poll.
+      // ATR history is strictly completed H1 candles; the live H1 snapshot is never
+      // mistaken for a completed bar. A setup is frozen once per config/hour.
+      const completedHours=pair[0].filter(x=>x.closeTime<now);
+      const liveHour=pair[0].filter(x=>x.openTime<=now).at(-1);
       const minutes=pair[1].filter(x=>x.closeTime<now);
-      if (hourly.length<31 || !minutes.length) continue;
-      const lastHour=hourly[hourly.length-1], configs=STRATEGIES.filter(x=>x.enabled);
+      if (completedHours.length<31 || !liveHour || !minutes.length) continue;
+      const configs=STRATEGIES.filter(x=>x.enabled);
       for (const cfg of configs) {
-        const impulse=detectImpulse(lastHour,hourly.slice(0,-1),cfg);
-        if (impulse) await state.fetch("https://state/setup",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({symbol,configId:cfg.id,...impulse,createdAt:now})});
+        const impulse=detectImpulse(liveHour,completedHours,cfg);
+        if (impulse) await state.fetch("https://state/setup",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({symbol,configId:cfg.id,...impulse,createdAt:now,detectedMinute:Math.floor(now/60000)*60000})});
       }
       for (const m of minutes) {
         await state.fetch("https://state/candle",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({symbol,candle:m,strategies:configs})});
@@ -130,8 +134,8 @@ export class ImpulseState {
   async read(key,fallback) { return (await this.ctx.storage.get(key))??fallback; }
   async addSetup(s) {
     const setups=await this.read("setups",{});
-    const key=s.symbol+":"+s.configId+":"+s.impulseCloseTime;
-    if (!setups[key]) setups[key]={...s,active:true,lastCandleTime:0,triggered:false};
+    const key=s.symbol+":"+s.configId+":"+s.impulseOpenTime;
+    if (!setups[key]) setups[key]={...s,active:true,lastCandleTime:s.detectedMinute??Math.floor(s.createdAt/60000)*60000,triggered:false};
     await this.ctx.storage.put("setups",setups);
     return json({ok:true});
   }
@@ -143,7 +147,9 @@ export class ImpulseState {
     let changed=false;
     for (const [key,s] of Object.entries(setups)) {
       const bar=input.candle;
-      if (!s.active || s.symbol!==input.symbol || bar.openTime<=s.impulseCloseTime || bar.openTime<=s.lastCandleTime) continue;
+      // Only completed M1 bars strictly after the minute in which this live-H1
+      // impulse snapshot was first detected may participate in retracement.
+      if (!s.active || s.symbol!==input.symbol || bar.openTime<=s.lastCandleTime) continue;
       const cfg=configs[s.configId]; if (!cfg) continue;
       s.lastCandleTime=bar.openTime;
       const result=retracementResult(bar,s,cfg);
@@ -151,7 +157,7 @@ export class ImpulseState {
       if (result&&result.trigger&&!s.triggered) {
         const candidateId=key+":"+bar.openTime;
         if (!seen[candidateId]) {
-          pending.push({candidateId,symbol:s.symbol,configId:s.configId,direction:s.direction,impulseCloseTime:s.impulseCloseTime,triggerTime:bar.closeTime,entryReference:result.entryReference,depth:result.depth});
+          pending.push({candidateId,symbol:s.symbol,configId:s.configId,direction:s.direction,impulseOpenTime:s.impulseOpenTime,impulseDetectedAt:s.createdAt,triggerTime:bar.closeTime,entryReference:result.entryReference,depth:result.depth});
           seen[candidateId]=true;s.triggered=true;changed=true;
         }
       }
