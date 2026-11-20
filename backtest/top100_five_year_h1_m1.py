@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Five-year Top-100 Impulse Retracer replay: forming H1 detection, M1 alert, next-minute fills."""
+"""Top-100 Impulse Retracer replay: forming H1 detection, M1 alert, next-minute fills."""
 import argparse, bisect, csv, hashlib, io, json, math, os, time, urllib.parse, urllib.request, zipfile
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -137,12 +137,17 @@ def load_funding(symbol,start_ms,end_ms):
         "source":"Binance USD-M official monthly fundingRate archives",
         "unpublished_partial_month_omitted":skipped_partial_month}
 def wilder(values,n):
-    out=np.full(len(values),np.nan,dtype=np.float64); acc=None; count=0
+    """Wilder smoothing seeded by the SMA of the first n valid observations."""
+    out=np.full(len(values),np.nan,dtype=np.float64); seed=[]; acc=None
     for i,x in enumerate(values):
         if not math.isfinite(float(x)):continue
-        if acc is None:acc=float(x);count=1
-        else:acc=(acc*(n-1)+float(x))/n;count+=1
-        if count>=n:out[i]=acc
+        if acc is None:
+            seed.append(float(x))
+            if len(seed)==n:
+                acc=float(sum(seed)/n);out[i]=acc
+        else:
+            acc=(acc*(n-1)+float(x))/n
+            out[i]=acc
     return out
 def h1_indicators(m1):
     ts,o,h,l,c=m1; n=len(ts)//60
@@ -313,10 +318,13 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--start",default="2021-11-19")
     ap.add_argument("--end",default="2026-11-19",help="exclusive UTC date")
+    ap.add_argument("--output",default="backtest-results-top100-5y",help="output directory under repository root")
     args=ap.parse_args()
+    global OUT
+    OUT=ROOT/args.output
     start_ms,end_ms=utc_ms(args.start),utc_ms(args.end)
     days=(end_ms-start_ms)//DAY
-    if days<1750 or days>1900:raise RuntimeError(f"Expected five-year window, got {days} days")
+    if days<360 or days>1900:raise RuntimeError(f"Expected a window of at least 360 days and no more than 1900 days, got {days} days")
     split_ms=((start_ms+int((end_ms-start_ms)*TRAIN_FRACTION))//DAY)*DAY
     configs=load_configs(); OUT.mkdir(parents=True,exist_ok=True)
     print(f"TOP-100 IMPULSE RETRACER | {args.start} to {args.end} UTC | BTCUSDT + ETHUSDT",flush=True)
@@ -364,7 +372,7 @@ def main():
         all_candidates.extend(candidates)
         symbol_data[symbol]={"m1":m1,"fund":fund,"checks":checks,"candidates":candidates,"ind":ind}
         summaries[symbol]={"m1Bars":len(ts),"h1Bars":len(ind["ts"]),"setups":setups,"entryCandidates":len(candidates),"funding":fund[2]}
-    # Simulate independent config streams to build PF estimates and validation diagnostics.
+    # Simulate independent config streams to build PF estimates and validation diagnostics.\n    # Sample validation (30+ training trades) does not imply profitability (PF > 1).
     train_rows=defaultdict(list); oos_rows=defaultdict(list); full_rows=defaultdict(list)
     candidate_outcomes={}
     for symbol in SYMBOLS:
