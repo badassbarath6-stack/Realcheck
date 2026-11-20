@@ -38,6 +38,7 @@ jobs:
         run: |
           npm test
           npm run check
+          python -m unittest discover -s tests -p 'test_*.py'
       - name: Validate five-year backtest runner
         run: python -m py_compile backtest/top100_five_year_h1_m1.py
       - name: Run five-year BTC and ETH Top-100 replay
