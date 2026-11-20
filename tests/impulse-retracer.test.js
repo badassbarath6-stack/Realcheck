@@ -17,6 +17,14 @@ function makeState() {
   };
   return {state:new ImpulseState({storage},{}),data};
 }
+async function post(state,path,body) {
+  const request=new Request("https://state"+path,{
+    method:"POST",
+    headers:{"content-type":"application/json"},
+    body:JSON.stringify(body)
+  });
+  return await (await state.fetch(request)).json();
+}
 function candidate(configId,rank,impulseKey="BTCUSDT:3600000",triggerMinute=3660000) {
   const symbol=impulseKey.split(":")[0];
   return {
@@ -46,7 +54,7 @@ test("M1 processing selects only the latest completed minute, not stale bars",()
 test("one completed configuration alerts without requiring a PF registry",async()=>{
   const {state,data}=makeState();
   await state.ctx.storage.put("pending",[candidate("IR-T001",1)]);
-  const result=await (await state.fetch("https://state/flush",{method:"POST",body:JSON.stringify({now:3700000,rankings:{}})})).json();
+  const result=await post(state,"/flush",{now:3700000,rankings:{}});
   assert.equal(result.selected.length,1);
   assert.equal(result.selected[0].configId,"IR-T001");
   assert.equal(result.selected[0].pf,null);
@@ -62,7 +70,7 @@ test("multiple configurations completing in the same minute compete by validated
     "IR-T002":{profitFactor:1.4,trades:200,validated:true},
     "IR-T001":{profitFactor:1.8,trades:100,validated:true}
   };
-  const result=await (await state.fetch("https://state/flush",{method:"POST",body:JSON.stringify({now:3700000,rankings})})).json();
+  const result=await post(state,"/flush",{now:3700000,rankings});
   assert.equal(result.selected.length,1);
   assert.equal(result.selected[0].configId,"IR-T001");
   assert.equal(result.selected[0].pf,1.8);
@@ -71,13 +79,13 @@ test("multiple configurations completing in the same minute compete by validated
 test("same impulse is locked across all configurations after successful alert",async()=>{
   const {state,data}=makeState();
   await state.ctx.storage.put("pending",[candidate("IR-T001",1)]);
-  await state.fetch("https://state/flush",{method:"POST",body:JSON.stringify({now:3700000,rankings:{}})});
-  await state.fetch("https://state/alert-result",{method:"POST",body:JSON.stringify({
+  await post(state,"/flush",{now:3700000,rankings:{}});
+  await post(state,"/alert-result",{
     candidateId:"x",impulseKey:"BTCUSDT:3600000",alertTime:3700000,alertResult:{sent:true}
-  })});
-  const add=await (await state.fetch("https://state/setup",{method:"POST",body:JSON.stringify({
+  });
+  const add=await post(state,"/setup",{
     symbol:"BTCUSDT",configId:"IR-T002",impulseOpenTime:3600000,createdAt:3720000,detectedMinute:3720000
-  })})).json();
+  });
   assert.equal(add.ok,false);
   assert.equal(add.reason,"IMPULSE_ALREADY_ALERTED");
   assert.equal(data.get("impulseLocks")["BTCUSDT:3600000"].status,"ALERTED");
@@ -88,7 +96,7 @@ test("a new hourly impulse can alert independently in the same execution cycle",
     candidate("IR-T001",1,"BTCUSDT:3600000"),
     candidate("IR-T003",3,"ETHUSDT:3600000")
   ]);
-  const result=await (await state.fetch("https://state/flush",{method:"POST",body:JSON.stringify({now:3700000,rankings:{}})})).json();
+  const result=await post(state,"/flush",{now:3700000,rankings:{}});
   assert.equal(result.selected.length,2);
 });
 test("multiple same-minute candidates are withheld if any candidate lacks validated PF",async()=>{
@@ -97,9 +105,9 @@ test("multiple same-minute candidates are withheld if any candidate lacks valida
     candidate("IR-T001",1),
     candidate("IR-T002",2)
   ]);
-  const result=await (await state.fetch("https://state/flush",{method:"POST",body:JSON.stringify({
+  const result=await post(state,"/flush",{
     now:3700000,rankings:{"IR-T001":{profitFactor:1.5,validated:true,trades:100}}
-  })})).json();
+  });
   assert.equal(result.selected.length,0);
   assert.equal(result.skipped[0].reason,"MULTIPLE_CONFIGS_REQUIRE_VALIDATED_PF_FOR_EVERY_CANDIDATE");
 });
@@ -110,14 +118,6 @@ test("structural stop is 1x and Top-100 RR is applied as 2R",()=>{
   assert.equal(plan.risk,60);
   assert.equal(plan.targetR,2);
 });
-
-test("the active model contains exactly the 100 approved ranked configurations",()=>{
-  assert.equal(STRATEGIES.length,100);
-  assert.deepEqual(STRATEGIES.map(x=>x.rank),Array.from({length:100},(_,i)=>i+1));
-  assert.equal(new Set(STRATEGIES.map(x=>x.id)).size,100);
-  assert.ok(STRATEGIES.every(x=>x.timeframe==="1h" && x.rr===2));
-});
-
 test("the active model contains exactly the 100 approved ranked configurations",()=>{
   assert.equal(STRATEGIES.length,100);
   assert.deepEqual(STRATEGIES.map(x=>x.rank),Array.from({length:100},(_,i)=>i+1));
