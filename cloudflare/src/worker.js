@@ -14,11 +14,48 @@ function candle(k) {
 function tr(c, previous) {
   return Math.max(c.high-c.low, Math.abs(c.high-previous.close), Math.abs(c.low-previous.close));
 }
-function atr(bars, period) {
-  if (bars.length < period+1) return null;
-  const values=[];
-  for (let i=bars.length-period;i<bars.length;i++) values.push(tr(bars[i],bars[i-1]));
-  return values.reduce((a,b)=>a+b,0)/period;
+function wilder(values, period) {
+  let value=null, count=0;
+  for (const x of values) {
+    if (x===null || !Number.isFinite(x)) continue;
+    value=value===null?x:((value*(period-1))+x)/period;
+    count++;
+  }
+  return count>=period?value:null;
+}
+function indicatorSnapshot(history,current,periods) {
+  const bars=[...history,current], n=bars.length;
+  const trValues=Array(n).fill(null), plus=Array(n).fill(null), minus=Array(n).fill(null);
+  const gains=Array(n).fill(null), losses=Array(n).fill(null);
+  for(let i=1;i<n;i++){
+    const b=bars[i],p=bars[i-1];
+    trValues[i]=tr(b,p);
+    const up=b.high-p.high,down=p.low-b.low;
+    plus[i]=up>down&&up>0?up:0;
+    minus[i]=down>up&&down>0?down:0;
+    const delta=b.close-p.close;
+    gains[i]=Math.max(delta,0);losses[i]=Math.max(-delta,0);
+  }
+  const atrPrior={};
+  for(const period of periods) atrPrior[period]=wilder(trValues.slice(0,-1),period);
+  const avgGain=wilder(gains,14),avgLoss=wilder(losses,14);
+  const rsi=avgGain===null||avgLoss===null?null:(avgLoss===0?100:100-100/(1+avgGain/avgLoss));
+  const atr14=wilder(trValues,14),pdm=wilder(plus,14),mdm=wilder(minus,14);
+  let adx=null;
+  if(atr14!==null&&pdm!==null&&mdm!==null&&atr14>0){
+    const pdi=100*pdm/atr14,mdi=100*mdm/atr14,den=pdi+mdi;
+    const dx=den===0?null:100*Math.abs(pdi-mdi)/den;
+    const priorDx=[];
+    for(let i=1;i<n-1;i++){
+      const a=wilder(trValues.slice(0,i+1),14);
+      const p=wilder(plus.slice(0,i+1),14),m=wilder(minus.slice(0,i+1),14);
+      if(a===null||p===null||m===null||a===0){priorDx.push(null);continue;}
+      const pi=100*p/a,mi=100*m/a,dd=pi+mi;
+      priorDx.push(dd===0?null:100*Math.abs(pi-mi)/dd);
+    }
+    adx=wilder([...priorDx,dx],14);
+  }
+  return {atrPrior,adx,rsi};
 }
 export function selectLiveHour(hourly, now) {
   return hourly.filter(x=>x.openTime<=now && x.closeTime>=now).at(-1) || null;
@@ -43,20 +80,22 @@ export function structuralTradePlan(entry, setup, cfg) {
   const target=setup.direction==="LONG" ? entry+risk*targetR : entry-risk*targetR;
   return {stop,target,risk,stopMultiplier:multiplier,targetR};
 }
-export function detectImpulse(bar, history, cfg) {
-  const volatility=atr(history,cfg.atrPeriod);
-  if (!volatility || volatility<=0 || bar.close===bar.open) return null;
+export function detectImpulse(bar, history, cfg, indicators) {
+  const volatility=indicators?.atrPrior?.[cfg.atrPeriod];
+  const adx=indicators?.adx, rsi=indicators?.rsi;
+  if (volatility===null||volatility===undefined||volatility<=0||adx===null||adx===undefined) return null;
+  if(adx<cfg.adxMin||adx>cfg.adxMax||bar.close===bar.open) return null;
+  const direction=bar.close>bar.open?"LONG":"SHORT";
+  if(bar.high-bar.low<volatility*cfg.impulseAtr) return null;
+  if(cfg.rsiMode==="exact"){
+    if(direction==="LONG"&&!(rsi!==null&&rsi>=50&&rsi<=70))return null;
+    if(direction==="SHORT"&&!(rsi!==null&&rsi>=30&&rsi<=50))return null;
+  }else if(cfg.rsiMode==="loose"){
+    if(direction==="LONG"&&!(rsi!==null&&rsi>=50&&rsi<=75))return null;
+    if(direction==="SHORT"&&!(rsi!==null&&rsi>=25&&rsi<=50))return null;
+  }else if(cfg.rsiMode!=="none") throw new Error("Unknown RSI mode: "+cfg.rsiMode);
   const range=bar.high-bar.low;
-  if (range<volatility*cfg.impulseAtr) return null;
-  return {
-    direction:bar.close>bar.open?"LONG":"SHORT",
-    atr:volatility,
-    range,
-    impulseHigh:bar.high,
-    impulseLow:bar.low,
-    impulseOpenTime:bar.openTime,
-    impulseCloseTime:bar.closeTime
-  };
+  return {direction,atr:volatility,adx,rsi,range,impulseHigh:bar.high,impulseLow:bar.low,impulseOpenTime:bar.openTime,impulseCloseTime:bar.closeTime};
 }
 // Entry is a single retracement level from the approved CSV, not a retracement zone.
 // Stop invalidation is checked before entry touch so a same-minute stop/entry overlap
@@ -142,15 +181,17 @@ async function runMinute(now,env) {
       const latestMinute=latestCompletedMinuteBar(minuteHistory,now);
       if (completedHours.length<Math.max(...configs.map(x=>x.atrPeriod))+1 || !liveHour || !latestMinute) continue;
 
+      // Indicators are recalculated against the forming H1 snapshot on every M1 execution.
+      const indicators=indicatorSnapshot(completedHours,liveHour,[...new Set(configs.map(x=>x.atrPeriod))]);
       // On every one-minute invocation, evaluate the current H1 candle for all 100 configs.
       for (const cfg of configs) {
-        const impulse=detectImpulse(liveHour,completedHours,cfg);
+        const impulse=detectImpulse(liveHour,completedHours,cfg,indicators);
         if (impulse) {
           await state.fetch("https://state/setup",{
             method:"POST",
             headers:{"content-type":"application/json"},
             body:JSON.stringify({
-              symbol,configId:cfg.id,rank:cfg.rank,...impulse,
+              symbol,configId:cfg.id,rank:cfg.rank,pendingBars:cfg.pendingBars,...impulse,
               createdAt:now,
               detectedMinute:Math.floor(now/60000)*60000
             })
@@ -212,7 +253,8 @@ export class ImpulseState {
         ...s,
         groupKey,
         active:true,
-        lastCandleTime:s.detectedMinute??Math.floor(s.createdAt/60000)*60000,
+        lastCandleTime:(s.detectedMinute??Math.floor(s.createdAt/60000)*60000)-60000,
+        expiresAt:s.impulseOpenTime+(s.pendingBars+1)*60*60*1000,
         triggered:false
       };
       await this.ctx.storage.put("setups",setups);
@@ -230,6 +272,7 @@ export class ImpulseState {
       const bar=input.candle;
       if (!s.active || s.symbol!==input.symbol || bar.openTime<=s.lastCandleTime) continue;
       s.lastCandleTime=bar.openTime;
+      if(bar.openTime>=s.expiresAt){s.active=false;s.expiredAt=bar.openTime;continue;}
       changed=true;
       if (locks[s.groupKey]) { s.active=false; continue; }
       const cfg=configs[s.configId];
