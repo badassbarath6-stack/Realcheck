@@ -100,26 +100,19 @@ def load_m1(symbol,start_ms,end_ms):
     return (ts,o,h,l,c),checks
 def load_funding(symbol,start_ms,end_ms):
     events={}
-    for month in month_range(start_ms,end_ms):
+    months=month_range(start_ms,end_ms)
+    end_dt=datetime.fromtimestamp(end_ms/1000,timezone.utc)
+    final_month_is_partial=(end_dt.day>1 or end_dt.hour>0 or end_dt.minute>0 or end_dt.second>0)
+    skipped_partial_month=None
+    for month in months:
+        # Binance publishes funding-rate archives monthly, only after a month closes.
+        # Keep the full five-year M1 replay; omit only the unpublished tail-month funding.
+        if month==months[-1] and final_month_is_partial:
+            skipped_partial_month=month
+            continue
         name=f"{symbol}-fundingRate-{month}.zip"
         url=f"{BASE}/monthly/fundingRate/{symbol}/{name}"
-        try:p,_=archive_file(url)
-        except Exception:
-            # The unfinished final month may not have a monthly archive; use paginated official REST.
-            if month==month_range(start_ms,end_ms)[-1]:
-                cursor=start_ms
-                while cursor<end_ms:
-                    q=urllib.parse.urlencode({"symbol":symbol,"startTime":cursor,"endTime":end_ms-1,"limit":1000})
-                    payload=json.loads(http_bytes("https://fapi.binance.com/fapi/v1/fundingRate?"+q))
-                    if not payload:break
-                    for x in payload:
-                        t=int(x["fundingTime"]); rate=float(x["fundingRate"])
-                        if start_ms<=t<end_ms and math.isfinite(rate):events[t]=rate
-                    last=max(int(x["fundingTime"]) for x in payload)
-                    if len(payload)<1000 or last<cursor:break
-                    cursor=last+1
-                continue
-            raise
+        p,_=archive_file(url)
         with zipfile.ZipFile(p) as z:
             for name2 in z.namelist():
                 if not name2.lower().endswith(".csv"):continue
@@ -127,18 +120,22 @@ def load_funding(symbol,start_ms,end_ms):
                     for row in csv.reader(io.TextIOWrapper(raw,encoding="utf-8",newline="")):
                         if len(row)<3:continue
                         try:
-                            if row[0].strip().upper()==symbol and len(row)>=4:t=int(float(row[1])); rate=float(row[3])
-                            else:t=int(float(row[0])); rate=float(row[2])
+                            if row[0].strip().upper()==symbol and len(row)>=4:
+                                t=int(float(row[1])); rate=float(row[3])
+                            else:
+                                t=int(float(row[0])); rate=float(row[2])
                         except (ValueError,TypeError):continue
                         if start_ms<=t<end_ms and math.isfinite(rate):events[t]=rate
     ordered=sorted(events.items())
     expected=(end_ms-start_ms)//DAY*3
     coverage=100*len(ordered)/expected if expected else 0
-    if coverage<95:raise RuntimeError(f"{symbol} funding archive coverage only {coverage:.1f}% ({len(ordered)} records; rough expected {expected})")
+    if coverage<95:raise RuntimeError(f"{symbol} official funding archive coverage only {coverage:.1f}% ({len(ordered)} records; rough expected {expected})")
     times=np.array([x[0] for x in ordered],dtype=np.int64)
     prefix=np.zeros(len(ordered)+1,dtype=np.float64)
     for i,x in enumerate(ordered):prefix[i+1]=prefix[i]+x[1]
-    return times,prefix,{"records":len(ordered),"rough_coverage_pct":round(coverage,2)}
+    return times,prefix,{"records":len(ordered),"rough_coverage_pct":round(coverage,2),
+        "source":"Binance USD-M official monthly fundingRate archives",
+        "unpublished_partial_month_omitted":skipped_partial_month}
 def wilder(values,n):
     out=np.full(len(values),np.nan,dtype=np.float64); acc=None; count=0
     for i,x in enumerate(values):
@@ -436,7 +433,7 @@ def main():
         "indicators":"Wilder ATR prior completed H1; Wilder ADX(14) and RSI(14) recalculated from forming H1 snapshot. exact RSI: long 50-70/short 30-50; loose: long 50-75/short 25-50.",
         "pendingBars":"Valid from first detection minute until impulse H1 open + (pending_bars+1) hours; 3 means the impulse hour plus the next 3 hourly bars, expiry at the following H1 open.",
         "exits":"Structural opposite impulse extreme (1x); target 2R; stop-first if both barriers hit in one M1 candle; adverse gap stop fills at candle open; max hold 24h.",
-        "costs":{"feeBpsPerSide":FEE_BPS,"slippageBpsPerSideScenarios":list(SLIPPAGE),"funding":"Official Binance USD-M fundingRate monthly archives plus REST for unfinished month."},
+        "costs":{"feeBpsPerSide":FEE_BPS,"slippageBpsPerSideScenarios":list(SLIPPAGE),"funding":"Official Binance USD-M monthly fundingRate archives; unpublished incomplete final month omitted and coverage disclosed."},
         "trainSplitUtc":datetime.fromtimestamp(split_ms/1000,timezone.utc).isoformat(),
         "data":summaries,
         "pfRegistryValidatedConfigs":sum(1 for x in registry.values() if x["validated"]),
