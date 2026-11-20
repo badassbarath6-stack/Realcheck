@@ -392,7 +392,7 @@ def main():
     full_pf={}
     for cfg in configs:
         m=metrics(full_rows[cfg["id"]])
-        if m["trades"]>=30 and m["profitFactor"] is not None and m["netBps"]>0:
+        if m["trades"]>=30 and m["profitFactor"] is not None:
             full_pf[cfg["id"]]={"profitFactor":m["profitFactor"],"trades":m["trades"],"validated":True}
     selected_full,skipped_full=select_alerts(all_candidates,full_pf)
     model_oos={2.0:[],7.0:[]}; model_full={2.0:[],7.0:[]}
