@@ -168,3 +168,18 @@ test("two configurations touched by the same M1 candle are compared together by 
   assert.equal(result.selected.length,1);
   assert.equal(result.selected[0].configId,"IR-T002");
 });
+
+test("configurations triggered in different M1 minutes are not compared by PF",async()=>{
+  const {state}=makeState();
+  await state.ctx.storage.put("pending",[
+    candidate("IR-T001",1,"BTCUSDT:3600000",3660000),
+    candidate("IR-T002",2,"BTCUSDT:3600000",3720000)
+  ]);
+  const result=await post(state,"/flush",{now:3780000,rankings:{
+    "IR-T001":{profitFactor:1.2,trades:100,validated:true},
+    "IR-T002":{profitFactor:2.5,trades:100,validated:true}
+  }});
+  assert.equal(result.selected.length,1);
+  assert.equal(result.selected[0].configId,"IR-T001");
+  assert.equal(result.selected[0].pf,null);
+});
