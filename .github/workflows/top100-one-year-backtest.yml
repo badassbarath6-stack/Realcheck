@@ -1,0 +1,57 @@
+name: Impulse Retracer One-Year Backtest and Architecture Audit
+
+on:
+  push:
+    branches: [fix/top100-single-alert-architecture]
+    paths:
+      - "config/strategies.js"
+      - "cloudflare/src/worker.js"
+      - "backtest/top100_five_year_h1_m1.py"
+      - "tests/impulse-retracer.test.js"
+      - "tests/test_top100_backtest.py"
+      - ".github/workflows/top100-one-year-backtest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: impulse-retracer-top100-one-year
+  cancel-in-progress: true
+
+jobs:
+  one-year-backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout audited branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/top100-single-alert-architecture
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install numerical runtime
+        run: python -m pip install --disable-pip-version-check numpy==2.2.6
+      - name: Run live architecture tests
+        run: |
+          npm test
+          npm run check
+          python -m unittest discover -s tests -p 'test_*.py'
+      - name: Validate backtest runner
+        run: python -m py_compile backtest/top100_five_year_h1_m1.py
+      - name: Run trailing one-year BTC and ETH replay
+        run: |
+          python backtest/top100_five_year_h1_m1.py \
+            --start 2025-11-19 \
+            --end 2026-11-19 \
+            --output backtest-results-top100-1y
+      - name: Upload one-year research outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: impulse-retracer-top100-one-year-results
+          path: backtest-results-top100-1y/
+          if-no-files-found: warn
+          retention-days: 30
