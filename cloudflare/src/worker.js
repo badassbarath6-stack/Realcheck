@@ -198,7 +198,7 @@ async function runMinute(now,env) {
   for (const symbol of symbols) {
     try {
       const [hourly,minuteHistory]=await Promise.all([
-        getKlines(symbol,"1h",1440,env.BINANCE_API_BASE),
+        getKlines(symbol,"1h",1441,env.BINANCE_API_BASE),
         getKlines(symbol,"1m",60,env.BINANCE_API_BASE)
       ]);
       const completedHours=hourly.filter(x=>x.closeTime<now);
