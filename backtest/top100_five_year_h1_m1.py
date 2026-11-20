@@ -339,13 +339,13 @@ def run_symbol(symbol,configs,start_ms,end_ms,split_ms):
 
 def main():
     ap=argparse.ArgumentParser()
-    ap.add_argument("--start",default="2021-11-20")
-    ap.add_argument("--end",default="2026-11-20",help="exclusive UTC date")
+    ap.add_argument("--start",default="2021-11-19")
+    ap.add_argument("--end",default="2026-11-19",help="exclusive UTC date")
     args=ap.parse_args()
     start_ms,end_ms=utc_ms(args.start),utc_ms(args.end)
     days=(end_ms-start_ms)//DAY
     if days<1750 or days>1900:raise RuntimeError(f"Expected five-year window, got {days} days")
-    split_ms=start_ms+int((end_ms-start_ms)*TRAIN_FRACTION)
+    split_ms=((start_ms+int((end_ms-start_ms)*TRAIN_FRACTION))//DAY)*DAY
     configs=load_configs(); OUT.mkdir(parents=True,exist_ok=True)
     print(f"TOP-100 IMPULSE RETRACER | {args.start} to {args.end} UTC | BTCUSDT + ETHUSDT",flush=True)
     summaries={}; all_candidates=[]; symbol_data={}
