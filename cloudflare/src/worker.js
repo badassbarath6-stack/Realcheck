@@ -74,7 +74,7 @@ export default {
   async scheduled(event,env,ctx) { ctx.waitUntil(runMinute(event.scheduledTime||Date.now(),env)); },
   async fetch(request,env) {
     const url=new URL(request.url);
-    if (url.pathname==="/health") return json({ok:true,service:"Impulse Retracer",schedule:"every minute",alertBatch:"UTC five-minute boundaries"});
+    if (url.pathname==="/health") return json({ok:true,service:"Impulse Retracer",schedule:"every minute",alertCycle:"every successful one-minute poll"});
     if (url.pathname==="/admin/pf-rankings" && request.method==="GET") return json(PF_RANKINGS);
     return json({error:"Not found"},404);
   }
@@ -102,7 +102,7 @@ async function runMinute(now,env) {
       }
     } catch(e) { errors.push({symbol,error:String(e.message||e)}); }
   }
-  if (new Date(now).getUTCMinutes()%5===0) {
+  {
     const response=await state.fetch("https://state/flush",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({now,rankings:PF_RANKINGS})});
     const payload=await response.json();
     if (payload.selected) {
@@ -164,17 +164,16 @@ export class ImpulseState {
   }
   async flush(input) {
     const pending=await this.read("pending",[]);
-    const batchStart=Math.floor(input.now/300000)*300000-300000;
-    const inBatch=pending.filter(c=>c.triggerTime>batchStart && c.triggerTime<=input.now);
-    const eligible=inBatch.filter(c=>Number.isFinite(Number(input.rankings[c.configId]?.profitFactor))&&Number(input.rankings[c.configId].profitFactor)>0&&input.rankings[c.configId].validated===true);
+    // Each successful minute poll is its own selection cycle; no five-minute batch.
+    const eligible=pending.filter(c=>Number.isFinite(Number(input.rankings[c.configId]?.profitFactor))&&Number(input.rankings[c.configId].profitFactor)>0&&input.rankings[c.configId].validated===true);
     eligible.sort((a,b)=>{
       const pa=input.rankings[a.configId],pb=input.rankings[b.configId];
       return pb.profitFactor-pa.profitFactor||(pb.trades||0)-(pa.trades||0)||a.triggerTime-b.triggerTime;
     });
     const selected=eligible[0]||null;
-    // Drop the completed five-minute window, including unranked candidates; never carry stale triggers forward.
-    await this.ctx.storage.put("pending",pending.filter(c=>c.triggerTime>input.now));
-    if (!selected) return json({selected:null,queued:inBatch.length,reason:"NO_PF_VALIDATED_CONFIGURATION"});
+    // Resolve the current minute poll; do not defer stale candidates to a later poll.
+    await this.ctx.storage.put("pending",[]);
+    if (!selected) return json({selected:null,queued:pending.length,reason:"NO_PF_VALIDATED_CONFIGURATION"});
     return json({selected:{...selected,pf:input.rankings[selected.configId].profitFactor,alertTime:input.now}});
   }
   async alertResult(input) {
