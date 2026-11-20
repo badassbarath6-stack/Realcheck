@@ -1,0 +1,25 @@
+name: Validate Impulse Retracer Research Runner
+on:
+  push:
+    branches:
+      - research/mtf-top100-two-year
+    paths:
+      - "research/impulse_retracer_backtest.py"
+      - "tests/research/**"
+      - ".github/workflows/validate-impulse-research.yml"
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/mtf-top100-two-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile runner
+        run: python -m py_compile research/impulse_retracer_backtest.py
+      - name: Run research unit tests
+        run: python -m unittest discover -s tests/research -v
+      - name: Validate CLI
+        run: python research/impulse_retracer_backtest.py --help
