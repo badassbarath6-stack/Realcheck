@@ -280,13 +280,37 @@ def write_csv(path,rows):
         path.write_text("no_rows\n");return
     with path.open("w",newline="",encoding="utf-8") as f:
         w=csv.DictWriter(f,fieldnames=list(rows[0]));w.writeheader();w.writerows(rows)
+CONFIG_CSV_SHA256=None
 def load_configs():
-    s=(ROOT/"config/strategies.js").read_text()
-    m=__import__("re").search(r"export const STRATEGIES = (\[[\s\S]*?\]);",s)
-    if not m:raise RuntimeError("Cannot parse Top-100 configuration array")
+    global CONFIG_CSV_SHA256
+    csv_path=ROOT/"config/model3_asset_independent_top100_rr2.csv"
+    csv_bytes=csv_path.read_bytes()
+    CONFIG_CSV_SHA256=hashlib.sha256(csv_bytes).hexdigest()
+    with csv_path.open(newline="",encoding="utf-8") as f:
+        source_rows=list(csv.DictReader(f))
+    if len(source_rows)!=100:raise RuntimeError(f"Approved source CSV must have 100 rows; got {len(source_rows)}")
+    expected=[]
+    for row in source_rows:
+        expected.append({
+            "id":f"IR-T{int(row['rank']):03d}","rank":int(row["rank"]),
+            "timeframe":row["timeframe"],"atrPeriod":int(row["atr_period"]),
+            "impulseAtr":float(row["impulse_atr"]),"adxMin":float(row["adx_min"]),
+            "adxMax":float(row["adx_max"]),"rsiMode":row["rsi_mode"],
+            "retracement":float(row["retracement"]),"rr":float(row["rr"]),
+            "pendingBars":int(row["pending_bars"])
+        })
+    js=(ROOT/"config/strategies.js").read_text()
+    m=__import__("re").search(r"export const STRATEGIES = (\[[\s\S]*?\]);",js)
+    if not m:raise RuntimeError("Cannot parse live Top-100 configuration array")
     configs=json.loads(m.group(1))
-    if len(configs)!=100 or [x["rank"] for x in configs]!=list(range(1,101)):raise RuntimeError("Expected exact Top-100 ranks 1..100")
-    if any(x["rr"]!=2 or x["timeframe"]!="1h" for x in configs):raise RuntimeError("Top-100 RR/timeframe mismatch")
+    if configs!=[dict(x,enabled=True) for x in expected]:
+        # enabled is the only live-only field; all strategy parameters and rank IDs must match CSV exactly.
+        actual=[{k:v for k,v in x.items() if k!="enabled"} for x in configs]
+        if actual!=expected:raise RuntimeError("Live strategy parameters do not exactly match the approved Top-100 CSV")
+    if len(configs)!=100 or [x["rank"] for x in configs]!=list(range(1,101)):
+        raise RuntimeError("Expected exact Top-100 ranks 1..100")
+    if any(x["rr"]!=2 or x["timeframe"]!="1h" for x in configs):
+        raise RuntimeError("Top-100 RR/timeframe mismatch")
     return configs
 def main():
     ap=argparse.ArgumentParser()
@@ -406,7 +430,7 @@ def main():
     write_csv(OUT/"oos_yearly_metrics.csv",yearly)
     write_csv(OUT/"oos_skipped_impulses.csv",skipped_oos)
     write_csv(OUT/"full_skipped_impulses.csv",skipped_full)
-    summary={"status":"COMPLETED","periodUtc":{"start":args.start,"endExclusive":args.end},"symbols":list(SYMBOLS),"configurations":len(configs),
+    summary={"status":"COMPLETED","periodUtc":{"start":args.start,"endExclusive":args.end},"symbols":list(SYMBOLS),"configurations":len(configs),"approvedCsvSha256":CONFIG_CSV_SHA256,
         "model":"One Top-100 model; first M1 entry trigger per symbol/hour impulse; PF comparison only among configurations triggering on the same M1 candle.",
         "execution":"H1 forming candle evaluated every minute using completed M1 history through prior minute; M1 retracement touch triggers alert at candle close; entry filled at next M1 open.",
         "indicators":"Wilder ATR prior completed H1; Wilder ADX(14) and RSI(14) recalculated from forming H1 snapshot. exact RSI: long 50-70/short 30-50; loose: long 50-75/short 25-50.",
