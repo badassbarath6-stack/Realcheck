@@ -237,6 +237,8 @@ def simulate(candidate,m1,fund,slip,end_ms):
         if target_hit:
             exit_raw=target; reason="TARGET"; exit_i=j; break
     if exit_i is None:
+        # Do not manufacture a time exit at a truncated train/test or data boundary.
+        if i+MAX_HOLD-1>last:return None
         exit_i=last; exit_raw=float(c[last]); reason="TIME"
     exit_time=int(ts[exit_i]+MIN-1)
     exit_px=exit_raw*(1-side*slip/10000)
