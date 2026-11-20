@@ -1,21 +1,26 @@
 # Impulse Retracer
 
-Independent implementation. The prior model source is not a dependency or design reference.
+## Model definition
+- One model containing exactly the 100 approved configurations from `model3_asset_independent_top100_rr2.csv`.
+- Configuration IDs `IR-T001` through `IR-T100` preserve CSV ranks 1–100 and each row's timeframe, ATR period, impulse ATR, ADX range, RSI mode, retracement, RR, and pending-bars value.
+- No five-configuration starter set and no ten-model split.
 
-## Minute execution
-- Cloudflare Cron is configured as `* * * * *`: one scheduled invocation each minute.
-- On **every successful minute poll**, inspect the currently forming H1 candle for each enabled configuration. The first qualifying live H1 snapshot is frozen once per symbol/config/hour.
-- ATR is calculated from completed H1 history only; the current forming H1 candle is the impulse candidate.
-- On the same poll, process completed M1 candles. Only M1 bars after the detection minute can trigger a retracement.
-- There is no five-minute batch and no wait for H1 close.
-- A setup remains active until its impulse boundary is breached; no fixed 3/6-candle expiry.
-- A trigger reference is not a fill. Any execution must use a fresh quote after the alert.
+## Execution and alert architecture
+- Cloudflare Cron invokes the Worker every minute.
+- Every successful minute invocation inspects the currently forming H1 candle against all 100 configurations. ATR history uses completed H1 candles only.
+- The Worker evaluates only the latest completed M1 candle. It does not backfill stale entry alerts.
+- Every qualifying configuration setup is retained independently; no PF selection occurs at impulse detection.
+- When one configuration completes its M1 entry condition, it is eligible to alert immediately.
+- If multiple configurations complete during the same M1 execution for the same symbol/H1 impulse, the highest validated PF wins. PF is not compared across different impulses.
+- A successful alert locks that symbol/H1 impulse across all 100 configurations. Other configurations cannot emit duplicate alerts from that impulse.
+- A new H1 impulse is eligible for a new alert.
+- Structural stop multiplier is 1.0x; target RR is read from each approved CSV row (2.0R).
+- A single candidate does not require a PF ranking. Multiple same-minute candidates require validated PF values for every competing configuration.
 
-## Initial candidate configurations
-The five entries IR-A01 through IR-A05 are **starter parameter variants**, not the earlier Top-100 configurations and not proven profitable. They vary ATR period, impulse range/body thresholds, retracement depth and confirmation level. Each currently specifies a 1.0x structural stop multiplier and a 5R target for the planned historical outcome simulation. The PF registry remains empty until a reproducible backtest establishes actual results.
+## Current verification boundary
+The one-minute scheduling, 100-row loading, latest-completed-M1 processing, same-minute PF selection, and per-impulse duplicate suppression are covered by unit tests.
+
+**The signal-definition work is not yet complete or deployment-ready:** the current impulse detector applies ATR-range strength and the entry evaluator applies the single retracement touch, but ADX/RSI filters and the precise `pending_bars` expiry semantics are not yet wired into live evaluation. The PF registry is also empty, so simultaneous multi-configuration triggers will be withheld until verified PF rankings exist. Do not deploy this branch as a fully validated trading model yet.
 
 ## Cloudflare
-Cron is best-effort and executes in UTC; exact wall-clock delivery is not guaranteed. A missed invocation can still leave an M1 history gap if the outage exceeds the worker's fetched candle window. Add GitHub secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; add Worker secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Vars: `SYMBOLS` (default BTCUSDT,ETHUSDT) and `BINANCE_API_BASE`.
-
-## Research rules
-Public `Realcheck` is the only backtesting workspace. The private repository is a code mirror only. Do not add PF rankings without actual out-of-sample evidence. No exchange orders are submitted by this worker.
+Cron: `* * * * *`. Default symbols: BTCUSDT, ETHUSDT. No exchange orders are submitted by this Worker.
