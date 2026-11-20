@@ -1,7 +1,7 @@
-import importlib.util, math, unittest
+import importlib.util, math, unittest, sys
 from pathlib import Path
 SPEC=importlib.util.spec_from_file_location("impulse_research",Path("research/impulse_retracer_backtest.py"))
-M=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(M)
+M=importlib.util.module_from_spec(SPEC); sys.modules[SPEC.name]=M; SPEC.loader.exec_module(M)
 
 class ResearchCoreTests(unittest.TestCase):
     def test_exact_grid(self):
