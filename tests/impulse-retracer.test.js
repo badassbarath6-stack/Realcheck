@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { STRATEGIES } from "../config/strategies.js";
 import {
-  selectLiveHour,\n  detectImpulse,\n  indicatorSnapshot,
+  selectLiveHour,
+  detectImpulse,
+  indicatorSnapshot,
   completedMinuteBars,
   latestCompletedMinuteBar,
   structuralTradePlan,
