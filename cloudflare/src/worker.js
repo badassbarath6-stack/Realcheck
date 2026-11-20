@@ -20,6 +20,8 @@ function atr(bars, period) {
   for (let i=bars.length-period;i<bars.length;i++) values.push(tr(bars[i],bars[i-1]));
   return values.reduce((a,b)=>a+b,0)/period;
 }
+export function selectLiveHour(hourly, now) { return hourly.filter(x=>x.openTime<=now).at(-1) || null; }
+export function completedMinuteBars(minutes, now) { return minutes.filter(x=>x.closeTime<now); }
 function detectImpulse(bar, history, cfg) {
   const volatility=atr(history,cfg.atrPeriod);
   if (!volatility || volatility<=0) return null;
@@ -94,8 +96,8 @@ async function runMinute(now,env) {
       // ATR history is strictly completed H1 candles; the live H1 snapshot is never
       // mistaken for a completed bar. A setup is frozen once per config/hour.
       const completedHours=pair[0].filter(x=>x.closeTime<now);
-      const liveHour=pair[0].filter(x=>x.openTime<=now).at(-1);
-      const minutes=pair[1].filter(x=>x.closeTime<now);
+      const liveHour=selectLiveHour(pair[0],now);
+      const minutes=completedMinuteBars(pair[1],now);
       if (completedHours.length<31 || !liveHour || !minutes.length) continue;
       const configs=STRATEGIES.filter(x=>x.enabled);
       for (const cfg of configs) {
