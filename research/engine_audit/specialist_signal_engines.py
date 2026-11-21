@@ -101,9 +101,10 @@ def round_number_bounce(rows: Sequence[Mapping[str, Any]], params: dict | None=N
         tolerance=close*touch
         bounce_up=float(row["low"])<=support+tolerance and close>support+tolerance
         bounce_down=float(row["high"])>=resistance-tolerance and close<resistance-tolerance
-        direction=1 if bounce_up else (-1 if bounce_down else 0)
-        out.append({"timestamp":row["timestamp"],"direction":direction,"score":float(direction),
-                    "mechanism":"round_number_bounce"})
+        direction=1 if bounce_up else 0
+        out.append({"timestamp":row["timestamp"],"direction":direction,"exit_long":bool(bounce_down),
+                    "score":1.0 if bounce_up else (-1.0 if bounce_down else 0.0),
+                    "mechanism":"round_number_bounce","side":"long_only"})
     return out
 
 
