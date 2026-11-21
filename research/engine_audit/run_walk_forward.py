@@ -30,7 +30,7 @@ def strategy_spec(name):
         def signal(rows,p):
             return funding_rate_mean_reversion(rows,ema_period=p["ema_period"],
                 threshold_high=p["threshold_high"],threshold_low=p["threshold_low"])
-        return "15m",grid,signal,("funding_rate","buy_ratio")
+        return "15m",grid,signal,("funding_rate","buy_ratio","funding_age_ms")
     if name=="taker_momentum":
         grid=_grid({
             "ma_period":[5,15,30],
@@ -59,7 +59,7 @@ def strategy_spec(name):
             return oi_price_quadrants(rows,lookback_bars=p["lookback_bars"],
                 price_threshold=p["price_threshold"],oi_threshold=p["oi_threshold"],
                 use_mr=bool(p["use_mr"]))
-        return "15m",grid,signal,("open_interest","taker_ls_vol_ratio")
+        return "15m",grid,signal,("open_interest","taker_ls_vol_ratio","open_interest_age_ms","taker_ls_age_ms")
     raise ValueError(f"unknown strategy: {name}")
 
 
@@ -77,6 +77,8 @@ def main():
     p.add_argument("--fee-bps",type=float,default=5.0)
     p.add_argument("--slippage-bps",type=float,default=2.0)
     p.add_argument("--fill-model",choices=("conservative","source_compatible"),default="conservative")
+    p.add_argument("--max-funding-age-hours",type=float,default=24.0)
+    p.add_argument("--max-metric-age-minutes",type=float,default=15.0)
     a=p.parse_args()
     native_tf,grid,signal_fn,required=strategy_spec(a.strategy)
     timeframe=a.timeframe or native_tf
@@ -86,6 +88,22 @@ def main():
     missing=[k for k in required if not any(k in r for r in rows)]
     if missing:
         raise ValueError(f"{a.strategy} requires point-in-time columns: {missing}")
+    if a.strategy=="funding_mr":
+        ages=[r["funding_age_ms"] for r in rows if "funding_age_ms" in r]
+        if not ages:
+            raise ValueError("funding_mr needs funding_age_ms from the causal funding join")
+        if any(age>a.max_funding_age_hours*3600000 for age in ages):
+            raise ValueError("funding history contains stale observations beyond the configured age limit")
+    if a.strategy=="oi_divergence":
+        ages=[(r.get("open_interest_age_ms"),r.get("taker_ls_age_ms")) for r in rows]
+        first=next((i for i,(oi_age,ls_age) in enumerate(ages) if oi_age is not None and ls_age is not None),None)
+        if first is None:
+            raise ValueError("oi_divergence needs timestamped OI and taker-ratio age columns")
+        rows=rows[first:]
+        max_age=a.max_metric_age_minutes*60000
+        if any(r.get("open_interest_age_ms") is None or r.get("taker_ls_age_ms") is None or
+               r["open_interest_age_ms"]>max_age or r["taker_ls_age_ms"]>max_age for r in rows):
+            raise ValueError("OI/taker-ratio metrics are stale or missing inside the requested backtest period")
     if a.strategy=="taker_momentum" and any("volume" not in r for r in rows):
         raise ValueError("taker_momentum requires total base volume")
     result=walk_forward(rows,signal_fn,grid,timeframe=timeframe,
