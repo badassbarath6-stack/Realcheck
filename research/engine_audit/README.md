@@ -43,3 +43,13 @@ Batch 04 adds 15 distinct source-reviewed mechanisms. See [AUDIT_BATCH_04.md](AU
 
 
 Batch 05 adds four source-reviewed mechanisms. The cumulative accepted/conditional source-review count is 27 of the requested 100; 73 remain. See [AUDIT_BATCH_05.md](AUDIT_BATCH_05.md). No historical backtest has started.
+
+
+## Batch 06 imports
+
+- Candle engine: round_number_bounce.
+- L2 specialist signals: wall_pull_detector and book_imbalance_zscore.
+- Pairwise specialist signal: correlation_break_recovery.
+- WallBounceDetector is held conditional because the source proximity test can accept a wall on the wrong side of price.
+
+The cumulative accepted/conditional source-review count is 31 of 100; 69 remain. See [AUDIT_BATCH_06.md](AUDIT_BATCH_06.md). No historical backtest has started.
