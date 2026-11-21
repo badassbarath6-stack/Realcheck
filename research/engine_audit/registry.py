@@ -26,10 +26,11 @@ SPECIALIZED_NOT_CANDLE_BACKTESTABLE = (
     "orderbook_wall_pull",
     "orderbook_imbalance",
     "cross_asset_lead_lag",
+    "correlation_break_recovery",
 )
 CONDITIONAL_NOT_PROMOTED = (
     "oi_price_quadrants",
-    "round_number_reaction_long_only_exit_semantics",
+    "wall_bounce_distance_sign_bug",
 )
 REJECTED_OR_HELD_OUT = (
     "naive_fixed_spread_market_making_baseline",
