@@ -1,0 +1,123 @@
+name: Impulse Strength Only Three-Year Sweep
+on:
+  push:
+    branches:
+      - research/impulse-strength-only
+    paths:
+      - "research/impulse_strength_only_backtest.py"
+      - ".github/workflows/impulse-strength-only.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: impulse-strength-only
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/impulse-strength-only
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m py_compile research/impulse_strength_only_backtest.py
+      - run: python research/impulse_strength_only_backtest.py --help
+      - name: Verify search grid
+        run: |
+          python - <<'PY'
+          import ast
+          p=ast.parse(open("research/impulse_strength_only_backtest.py").read())
+          ns={}
+          exec(compile(p,"runner","exec"),ns)
+          assert len(ns["THRESHOLDS"]) == 96
+          assert ns["THRESHOLDS"][0] == 0.5 and ns["THRESHOLDS"][-1] == 10.0
+          print("96 impulse thresholds: 0.5x through 10.0x ATR")
+          PY
+  backtest:
+    needs: validate
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        symbol: [BTCUSDT, ETHUSDT]
+        timeframe: [5m, 15m, 30m, 1h, 2h, 4h]
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/impulse-strength-only
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run independent impulse-strength sweep
+        run: |
+          python research/impulse_strength_only_backtest.py \
+            --symbol "${{ matrix.symbol }}" \
+            --timeframe "${{ matrix.timeframe }}" \
+            --data-dir /tmp/binance --output-dir research-output
+      - name: Verify all thresholds and data integrity
+        env:
+          SYMBOL: ${{ matrix.symbol }}
+          TF: ${{ matrix.timeframe }}
+        run: |
+          python - <<'PY'
+          import csv, json, os
+          root="research-output"; s=os.environ["SYMBOL"]; t=os.environ["TF"]
+          rows=list(csv.DictReader(open(f"{root}/{s}_{t}_impulse_strength.csv")))
+          m=json.load(open(f"{root}/{s}_{t}_impulse_manifest.json"))
+          assert len(rows)==96 and m["threshold_count"]==96
+          assert m["m1_gap_count"]==0
+          assert len(m["source_files"])==36
+          print("Verified 96 thresholds, zero M1 gaps, 36 monthly archives")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strength-${{ matrix.symbol }}-${{ matrix.timeframe }}
+          path: research-output/
+          if-no-files-found: error
+          retention-days: 90
+  aggregate:
+    needs: backtest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/impulse-strength-only
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: strength-*
+          path: research-output
+          merge-multiple: true
+      - name: Print combined ranked results
+        run: |
+          python - <<'PY'
+          import csv,glob,json
+          allrows=[]
+          for p in glob.glob("research-output/*_impulse_manifest.json"):
+           m=json.load(open(p)); s,t=m["symbol"],m["timeframe"]
+           rows=list(csv.DictReader(open(f"research-output/{s}_{t}_impulse_strength.csv")))
+           allrows += rows
+           best=max(rows,key=lambda r:(float(r["validation_pf"]),float(r["validation_net_bps"])))
+           print(f'{s} {t}: best {best["impulse_atr"]}x | val PF {float(best["validation_pf"]):.3f} n={best["validation_trades"]} | OOS PF {float(best["oos_pf"]):.3f} n={best["oos_trades"]} | OOS stress PF {float(best["oos_stress7_pf"]):.3f}')
+          assert len(glob.glob("research-output/*_impulse_manifest.json"))==12
+          eligible=[r for r in allrows if int(float(r["validation_trades"]))>=30]
+          eligible.sort(key=lambda r:(float(r["validation_pf"]),float(r["validation_net_bps"])),reverse=True)
+          print("\nGLOBAL TOP 20 (validation-ranked; OOS not used for ranking)")
+          for r in eligible[:20]:
+           print(f'{r["symbol"]} {r["timeframe"]} {r["impulse_atr"]}x | val PF {float(r["validation_pf"]):.3f} n={r["validation_trades"]} | OOS PF {float(r["oos_pf"]):.3f} n={r["oos_trades"]} net {float(r["oos_net_bps"]):.1f}bps | stress {float(r["oos_stress7_pf"]):.3f}')
+          with open("research-output/global-ranked.csv","w",newline="") as f:
+           w=csv.DictWriter(f,fieldnames=list(eligible[0]));w.writeheader();w.writerows(eligible)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: impulse-strength-final
+          path: research-output/
+          if-no-files-found: error
+          retention-days: 90
