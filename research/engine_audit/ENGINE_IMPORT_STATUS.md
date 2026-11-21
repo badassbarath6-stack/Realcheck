@@ -40,7 +40,7 @@ The dedicated GitHub Actions workflow compiles the imported modules and runs the
 
 ## Audit count
 
-Seven distinct mechanisms have source-derived research modules in this branch (five specialist modules from Batch 01 plus RSI pivot divergence and volume/range exhaustion). Four are registered in the directional CSV runner; the specialist carry, market-making and delivery-basis modules require their own portfolio or event-driven execution adapters. Two additional Batch 02 mechanisms (Climax Fade and Momentum Decay) passed source review but are not imported because their stateful exits/cooldowns are not represented by the generic adapter. Batch 03 adds one source-verified dated-futures calendar-spread mechanism, but it is not imported until dated-curve data and two-leg contract accounting exist. OI remains conditional. These are code-level imports only; no historical backtest or profitability claim is made. The 100-candidate source audit remains incomplete.
+Six Python strategy modules currently exist in the isolated package. The directional registry includes five candle engines; the specialist registry includes two L2 detectors and one pairwise detector. Four are registered in the directional CSV runner; the specialist carry, market-making and delivery-basis modules require their own portfolio or event-driven execution adapters. Two additional Batch 02 mechanisms (Climax Fade and Momentum Decay) passed source review but are not imported because their stateful exits/cooldowns are not represented by the generic adapter. Batch 03 adds one source-verified dated-futures calendar-spread mechanism, but it is not imported until dated-curve data and two-leg contract accounting exist. OI remains conditional. These are code-level imports only; no historical backtest or profitability claim is made. The 100-candidate source audit remains incomplete.
 
 ## Additional source audit — batch 02
 
@@ -67,7 +67,7 @@ These are not all ready for backtesting. The source evaluators omit native trade
 
 - 23 distinct mechanisms have passed or conditionally passed source/mechanism review across Batches 01–04.
 - Batch 04 added 15; duplicates, misleading labels, overlays and look-ahead-defective candidates are excluded from the unique count.
-- 7 source-derived modules remain in the branch; 4 are registered in the directional CSV runner.
+- 6 Python strategy modules exist in the branch; 5 are registered in the directional CSV runner, with 3 additional specialist score engines.
 - The 100-mechanism source audit is still incomplete. No backtest has been started.
 
 
@@ -78,6 +78,18 @@ See [AUDIT_BATCH_05.md](AUDIT_BATCH_05.md). Batch 05 adds four source-reviewed m
 ## Current source-audit count (through Batch 05)
 
 - 27 distinct mechanisms have passed or conditionally passed source/mechanism review across Batches 01–05.
-- 7 source-derived modules remain in the branch; 4 are registered for the directional CSV runner.
+- 6 Python strategy modules exist in the branch; 5 are registered for the directional CSV runner, with 3 additional specialist score engines.
 - 73 more distinct source mechanisms must be audited before the requested 100-mechanism gate is met.
+- No historical backtest has started.
+
+
+## Source audit — Batch 06
+
+See [AUDIT_BATCH_06.md](AUDIT_BATCH_06.md). Batch 06 adds four unique mechanisms: psychological round-number bounce, tested liquidity-wall pull, top-N order-book imbalance z-score, and correlation-break recovery/relative lag. Round-number bounce is added to the candle runner; wall-pull and depth-imbalance are specialist L2 signals; correlation-break recovery is a paired-stream signal. The wall-bounce source is held conditional because its proximity checks do not verify that the wall is on the correct side of price.
+
+## Current source-audit count (through Batch 06)
+
+- 31 distinct mechanisms have passed or conditionally passed source/mechanism review across Batches 01–06.
+- 69 more distinct mechanisms must be source-audited before the requested 100-mechanism gate is met.
+- 6 Python strategy modules exist; 5 candle engines are registered in the CSV runner and 3 specialist score engines are registered separately.
 - No historical backtest has started.
