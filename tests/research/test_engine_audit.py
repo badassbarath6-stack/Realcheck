@@ -70,6 +70,20 @@ class AuditedEngineTests(unittest.TestCase):
         self.assertEqual(t[0]["exit_bar_open_timestamp"],d[-1]["timestamp"])
         self.assertEqual(t[0]["exit_bar_close_timestamp"],d[-1]["close_timestamp"])
         self.assertEqual(t[0]["exit_time_precision"],"bar_close")
+    def test_long_only_signal_exit_executes_next_open(self):
+        d=bars(5)
+        d[1].update({"open":100.0,"high":101.0,"low":99.0,"close":100.0})
+        d[3].update({"open":102.0,"high":103.0,"low":101.0,"close":102.0})
+        def signal(rows):
+            out=[{"direction":0} for _ in rows]
+            out[0]={"direction":1}
+            out[2]={"direction":0,"exit_long":True}
+            return out
+        trades=A.run_directional_signals(d,signal,stop_fraction=.05,target_r=5)
+        self.assertEqual(len(trades),1)
+        self.assertEqual(trades[0]["exit_reason"],"signal_exit_long")
+        self.assertEqual(trades[0]["exit_timestamp"],d[3]["timestamp"])
+        self.assertEqual(trades[0]["exit_time_precision"],"bar_open")
     def test_adapter_one_position_at_a_time(self):
         d=bars(8)
         def signal(rows): return [{"direction":1} for _ in rows]
