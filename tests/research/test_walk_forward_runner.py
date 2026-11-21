@@ -21,7 +21,7 @@ class WalkForwardRunnerTests(unittest.TestCase):
     def test_source_parameter_grids_and_native_timeframes(self):
         tf,g,fn,req=runner.strategy_spec("funding_mr")
         self.assertEqual(tf,"15m"); self.assertEqual(len(g),81)
-        self.assertEqual(set(req),{"funding_rate","buy_ratio"})
+        self.assertEqual(set(req),{"funding_rate","buy_ratio","funding_age_ms"})
         tf,g,fn,req=runner.strategy_spec("taker_momentum")
         self.assertEqual(tf,"5m"); self.assertEqual(len(g),108)
         self.assertTrue(all(p["tp_pct"]>p["sl_pct"] for p in g))
