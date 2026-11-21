@@ -139,3 +139,8 @@ See [AUDIT_BATCH_09.md](AUDIT_BATCH_09.md). Batch 09 adds two distinct OI-confir
 ## Source audit — Batch 10
 
 See [AUDIT_BATCH_10.md](AUDIT_BATCH_10.md). Batch 10 adds one conditional options-implied-volatility complacency regime (low trailing 90-observation Deribit DVOL percentile predicts underperformance over a 60-day horizon). Its source reports five of five walk-forward periods confirming the direction on both BTC and ETH, but it is not a costed futures trade simulation and requires point-in-time DVOL publication timestamps. The source's CVD absorption and spot/perpetual CVD leadership mechanisms were separately audited and rejected for promotion on their own negative test results; funding velocity and flow-conditioned sweep/breakout variants were deduplicated. The cumulative accepted/conditional source-review count is 37 of 100; 63 remain. No historical Realcheck backtest has started.
+
+
+## Source audit — Batch 11
+
+See [AUDIT_BATCH_11.md](AUDIT_BATCH_11.md). Batch 11 adds volatility-scaled cross-sectional price momentum: rank a point-in-time multi-perpetual universe by lagged 14-day return divided by lagged 30-day volatility, then hold equal-weight top-30% longs and bottom-30% shorts as a dollar-neutral portfolio. This is distinct from time-series momentum and from the funding-ranked evaluator previously rejected as mislabeled. Source is MIT-licensed. The source's own OOS Sharpe claim is not accepted as our result; survivorship bias, missing funding/slippage and an unstable final OOS third remain material limitations. It needs a separate portfolio-level adapter, not the single-symbol candle runner. Cumulative accepted/conditional source-review count: 38 of 100; 62 remain. No historical Realcheck backtest has started.
