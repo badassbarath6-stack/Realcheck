@@ -32,6 +32,24 @@ class AuditedEngineTests(unittest.TestCase):
         self.assertEqual(E.taker_buy_pressure_momentum(d,ma_period=10,confirm_bars=3,atr_period=10)[-1]["direction"],1)
         for r in d: r["buy_ratio"]=0.30
         self.assertEqual(E.taker_buy_pressure_momentum(d,ma_period=10,confirm_bars=3,atr_period=10)[-1]["direction"],-1)
+    def test_missing_buy_ratio_uses_neutral_fill_not_previous_flow(self):
+        d=bars(80)
+        for r in d: r["funding_rate"]=0.001; r["buy_ratio"]=0.9
+        d[-2].pop("buy_ratio")
+        self.assertEqual(E.funding_rate_mean_reversion(d,ema_period=10)[-1]["direction"],-1)
+        t=bars(130)
+        for r in t: r["buy_ratio"]=0.8
+        t[-2].pop("buy_ratio")
+        self.assertEqual(E.taker_buy_pressure_momentum(t,ma_period=10,confirm_bars=3,atr_period=10)[-1]["direction"],0)
+    def test_oi_reversal_warmup_and_metric_ffill(self):
+        d=bars(20)
+        for i,r in enumerate(d):
+            r["close"]=100.0-i*0.1
+            r["open_interest"]=1000.0 if i<7 else 900.0
+        d[18].pop("open_interest")
+        s=E.oi_price_quadrants(d,lookback_bars=12,price_threshold=.001,oi_threshold=.01)
+        self.assertEqual(s[13]["direction"],0)
+        self.assertEqual(s[19]["direction"],1)
     def test_oi_reversal_is_labelled_hypothesis(self):
         d=bars(20); d[-14]["close"]=100.; d[-14]["open_interest"]=1000.; d[-2]["close"]=99.; d[-2]["open_interest"]=900.
         s=E.oi_price_quadrants(d,lookback_bars=12,price_threshold=.005,oi_threshold=.01)[-1]
