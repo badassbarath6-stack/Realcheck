@@ -35,6 +35,8 @@ class BinanceFeaturePreparationTests(unittest.TestCase):
             self.assertAlmostEqual(float(rows[1]["funding_rate"]),0.0002)
             self.assertAlmostEqual(float(rows[2]["funding_rate"]),0.0002)
             self.assertAlmostEqual(float(rows[3]["funding_rate"]),-0.0001)
+            self.assertEqual(rows[0]["funding_age_ms"],"")
+            self.assertEqual(int(rows[1]["funding_age_ms"]),10000)
             self.assertEqual(int(rows[0]["close_timestamp"]),59999)
 
     def test_5m_resample_sums_taker_volume_and_joins_funding_at_bucket_open(self):
