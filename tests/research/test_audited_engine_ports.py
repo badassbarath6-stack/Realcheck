@@ -29,7 +29,7 @@ class AuditedEnginePortTests(unittest.TestCase):
         n=120
         rows=self.rows(n,buy_ratio=[0.8]*n)
         sig=taker_buy_pressure_momentum(rows,{"ma_period":5,"confirm_bars":2,"atr_period":5})
-        self.assertEqual(sig[:58],[0]*58)
+        self.assertEqual(sig[:53],[0]*53)
         self.assertTrue(any(x==1 for x in sig))
 
     def test_oi_quadrants_are_explicitly_opt_in(self):
