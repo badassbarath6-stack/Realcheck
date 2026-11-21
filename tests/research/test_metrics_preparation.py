@@ -30,6 +30,9 @@ class MetricsPreparationTests(unittest.TestCase):
             self.assertEqual(rows[0]["open_interest"],"")
             self.assertEqual(rows[1]["open_interest"],"1000.0")
             self.assertEqual(rows[2]["open_interest"],"900.0")
+            self.assertEqual(rows[0]["open_interest_age_ms"],"")
+            self.assertEqual(rows[1]["open_interest_age_ms"],"50")
+            self.assertEqual(rows[2]["taker_ls_age_ms"],"50")
             self.assertAlmostEqual(result["oi_coverage"],2/3)
 
 if __name__=="__main__": unittest.main()
