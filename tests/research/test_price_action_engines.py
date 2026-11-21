@@ -7,7 +7,7 @@ class PriceActionEngineTests(unittest.TestCase):
         prices=[100,100,100,100,100,100,100,100,100,90,85,80,78,77,76,75,74,73]
         for i,c in enumerate(prices):
             rows.append({"timestamp":i,"open":c,"high":c+0.5,"low":c-0.5,"close":c,
-                         "volume":100 if i<10 else 10})
+                         "volume":100 if i<13 else 10})
         # Small final ranges and lower volume complete the cooling condition.
         for r in rows[11:]:
             r["high"]=r["close"]+0.05; r["low"]=r["close"]-0.05
