@@ -10,7 +10,7 @@ START_MS=int(datetime(2021,11,20,tzinfo=timezone.utc).timestamp()*1000)
 END_MS=int(datetime(2026,11,20,tzinfo=timezone.utc).timestamp()*1000)
 BASE="https://data.binance.vision/data/futures/um"
 TIMEFRAMES={"5m":5,"15m":15,"30m":30,"1h":60,"2h":120,"4h":240}
-ATR_PERIODS=(14,); THRESHOLDS=(2.4,2.6,2.8,3.0)
+ATR_PERIODS=(14,); THRESHOLDS=(2.4,)  # minimum impulse threshold; every candle >= 2.4 ATR qualifies
 RETRACEMENTS=tuple(x/100 for x in range(0,100,5))
 BUFFERS=(1.,1.5,2.,2.5,3.)
 RRS=(2.,2.2,2.4,2.6,2.8,3.,3.5,4.,4.5,5.,5.5,6.)
