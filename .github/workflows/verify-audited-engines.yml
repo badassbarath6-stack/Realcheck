@@ -19,4 +19,4 @@ jobs:
         with:
           python-version: "3.12"
       - name: Run audited engine unit tests
-        run: python -m unittest tests.research.test_audited_engine_ports -v
+        run: python -m unittest discover -s tests/research -p 'test_audited_engine_ports.py' -v
