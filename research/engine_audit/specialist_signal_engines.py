@@ -25,48 +25,62 @@ def _num(row: Mapping[str, Any], key: str) -> float | None:
 
 
 def _validate(rows: Sequence[Mapping[str, Any]], required: Sequence[str]) -> None:
-    prev=None
-    for i,r in enumerate(rows):
-        if "timestamp" not in r:
+    previous=None
+    for i,row in enumerate(rows):
+        if "timestamp" not in row:
             raise ValueError(f"row {i} missing timestamp")
-        if prev is not None and r["timestamp"]<=prev:
+        if previous is not None and row["timestamp"]<=previous:
             raise ValueError("timestamps must be strictly increasing")
-        prev=r["timestamp"]
-        for k in required:
-            if _num(r,k) is None:
-                raise ValueError(f"row {i} missing or invalid {k}")
+        previous=row["timestamp"]
+        for key in required:
+            if _num(row,key) is None:
+                raise ValueError(f"row {i} missing or invalid {key}")
 
 
 def _rolling_max(values: Sequence[float | None], window: int, min_periods: int=1) -> list[float | None]:
     q: deque[int]=deque()
     out=[]
     valid=0
-    for i,x in enumerate(values):
-        while q and q[0] <= i-window:
+    for i,value in enumerate(values):
+        expired=i-window
+        if expired>=0 and values[expired] is not None:
+            valid-=1
+        while q and q[0]<=expired:
             q.popleft()
-        if x is not None:
-            while q and values[q[-1]] is not None and values[q[-1]] <= x:
+        if value is not None:
+            valid+=1
+            while q and values[q[-1]] is not None and values[q[-1]]<=value:
                 q.pop()
             q.append(i)
-        start=max(0,i-window+1)
-        valid=sum(1 for j in range(start,i+1) if values[j] is not None)
         out.append(values[q[0]] if valid>=min_periods and q else None)
     return out
 
 
-def _rolling_mean_std(values: Sequence[float | None], window: int, min_periods: int) -> tuple[list[float | None],list[float | None]]:
+def _rolling_mean_std(values: Sequence[float | None], window: int, min_periods: int):
+    q: deque[float]=deque()
+    total=0.0
+    total_sq=0.0
     means=[]; stds=[]
-    for i in range(len(values)):
-        xs=[float(x) for x in values[max(0,i-window+1):i+1] if x is not None]
-        if len(xs)<min_periods:
+    for value in values:
+        if value is not None:
+            x=float(value)
+            q.append(x); total+=x; total_sq+=x*x
+        else:
+            q.append(float("nan"))
+        if len(q)>window:
+            old=q.popleft()
+            if old==old:
+                total-=old; total_sq-=old*old
+        count=sum(1 for x in q if x==x) if len(q)<=window else 0
+        if count<min_periods:
             means.append(None); stds.append(None); continue
-        m=sum(xs)/len(xs)
-        means.append(m)
-        if len(xs)<2:
+        mean=total/count
+        means.append(mean)
+        if count<2:
             stds.append(None)
         else:
-            var=sum((x-m)**2 for x in xs)/(len(xs)-1)
-            stds.append(var**0.5)
+            variance=max(0.0,(total_sq-total*total/count)/(count-1))
+            stds.append(variance**0.5)
     return means,stds
 
 
@@ -76,20 +90,19 @@ def round_number_bounce(rows: Sequence[Mapping[str, Any]], params: dict | None=N
     p=params or {}
     frac=float(p.get("level_step_frac",0.05))
     touch=float(p.get("touch_threshold",0.003))
-    if frac<=0 or touch<0:
-        raise ValueError("invalid round-number parameters")
+    if frac<=0 or touch<0 or any(float(r["close"])<=0 for r in rows):
+        raise ValueError("invalid round-number parameters or non-positive close")
     out=[]
-    for r in rows:
-        close=float(r["close"])
-        raw=close*frac
-        step=10.0**round(log10(max(raw,1e-12)))
+    for row in rows:
+        close=float(row["close"])
+        step=10.0**round(log10(close*frac))
         support=floor(close/step)*step
         resistance=support+step
-        tol=close*touch
-        up=float(r["low"])<=support+tol and close>support+tol
-        down=float(r["high"])>=resistance-tol and close<resistance-tol
-        direction=1 if up else (-1 if down else 0)
-        out.append({"timestamp":r["timestamp"],"direction":direction,"score":float(direction),
+        tolerance=close*touch
+        bounce_up=float(row["low"])<=support+tolerance and close>support+tolerance
+        bounce_down=float(row["high"])>=resistance-tolerance and close<resistance-tolerance
+        direction=1 if bounce_up else (-1 if bounce_down else 0)
+        out.append({"timestamp":row["timestamp"],"direction":direction,"score":float(direction),
                     "mechanism":"round_number_bounce"})
     return out
 
@@ -100,78 +113,77 @@ def wall_pull_detector(rows: Sequence[Mapping[str, Any]], params: dict | None=No
     Offer wall removal scores +1 (upward breakout hypothesis); bid wall
     removal scores -1. This preserves the upstream event-edge semantics.
     """
-    keys=("close","bid_wall_price","bid_wall_qty","offer_wall_price","offer_wall_qty")
     _validate(rows,("close",))
     p=params or {}
     window=int(p.get("lookback",30))
     pull=float(p.get("pull_frac",0.3))
-    prox=float(p.get("prox_frac",0.001))
-    if window<5 or not 0<pull<1 or prox<0:
+    proximity=float(p.get("prox_frac",0.001))
+    if window<5 or not 0<pull<1 or proximity<0:
         raise ValueError("invalid wall-pull parameters")
     sides={}
     for side,sign in (("offer",1),("bid",-1)):
-        qty=[_num(r,f"{side}_wall_qty") for r in rows]
-        price=[_num(r,f"{side}_wall_price") for r in rows]
-        peak=_rolling_max(qty,window,min_periods=5)
-        was_near=[]
-        for i,r in enumerate(rows):
-            close=float(r["close"])
-            d=None if price[i] is None else ((price[i]-close)*sign)/close
-            near=d is not None and abs(d)<prox
-            was_near.append(near)
+        quantities=[_num(row,f"{side}_wall_qty") for row in rows]
+        prices=[_num(row,f"{side}_wall_price") for row in rows]
+        peaks=_rolling_max(quantities,window,min_periods=5)
+        near=[]
+        for i,row in enumerate(rows):
+            close=float(row["close"])
+            distance=None if prices[i] is None or close<=0 else ((prices[i]-close)*sign)/close
+            near.append(distance is not None and abs(distance)<proximity)
         near_rolling=[]
-        for i in range(len(rows)):
-            near_rolling.append(any(was_near[max(0,i-window+1):i+1]))
+        near_count=0
+        for i,flag in enumerate(near):
+            near_count+=int(flag)
+            if i>=window:
+                near_count-=int(near[i-window])
+            near_rolling.append(near_count>0)
         event=[]
         for i in range(len(rows)):
-            q=qty[i]; pk=peak[i]
-            event.append(q is not None and pk is not None and q < pull*pk and near_rolling[i])
+            qty=quantities[i]; peak=peaks[i]
+            event.append(qty is not None and peak is not None and qty<pull*peak and near_rolling[i])
         edge=[event[i] and (i==0 or not event[i-1]) for i in range(len(rows))]
         sides[side]=(sign,edge)
     out=[]
-    for i,r in enumerate(rows):
+    for i,row in enumerate(rows):
         score=0
-        for side,(sign,edge) in sides.items():
-            if edge[i]: score=sign
-        out.append({"timestamp":r["timestamp"],"direction":1 if score>0 else (-1 if score<0 else 0),
+        for sign,edge in sides.values():
+            if edge[i]:
+                score=sign
+        out.append({"timestamp":row["timestamp"],"direction":1 if score>0 else (-1 if score<0 else 0),
                     "score":float(score),"mechanism":"wall_pull"})
     return out
 
 
 def book_imbalance_zscore(rows: Sequence[Mapping[str, Any]], params: dict | None=None) -> list[dict[str, Any]]:
     """Rolling z-score of log(top-N bid depth / ask depth)."""
-    _validate(rows,("timestamp",))
+    _validate(rows,())
     p=params or {}
     window=int(p.get("window",240))
     max_z=float(p.get("max_z",3.0))
     if window<2 or max_z<=0:
         raise ValueError("invalid book-imbalance parameters")
     ratio=[]
-    for r in rows:
-        bid=_num(r,"bid_total"); ask=_num(r,"offer_total")
+    for row in rows:
+        bid=_num(row,"bid_total"); ask=_num(row,"offer_total")
         ratio.append(log(bid/ask) if bid is not None and ask is not None and bid>0 and ask>0 else None)
     mean,std=_rolling_mean_std(ratio,window,min_periods=min(60,window))
     out=[]
-    for i,r in enumerate(rows):
+    for i,row in enumerate(rows):
         z=None if mean[i] is None or std[i] in (None,0) or ratio[i] is None else (ratio[i]-mean[i])/std[i]
         score=0.0 if z is None else max(-1.0,min(1.0,z/max_z))
-        out.append({"timestamp":r["timestamp"],"direction":1 if score>0 else (-1 if score<0 else 0),
+        out.append({"timestamp":row["timestamp"],"direction":1 if score>0 else (-1 if score<0 else 0),
                     "score":score,"mechanism":"book_imbalance_zscore"})
     return out
 
 
-def correlation_break_recovery(
-    rows: Sequence[Mapping[str, Any]],
-    pair_rows: Sequence[Mapping[str, Any]],
-    params: dict | None=None,
-) -> list[dict[str, Any]]:
+def correlation_break_recovery(rows: Sequence[Mapping[str, Any]], pair_rows: Sequence[Mapping[str, Any]],
+                                params: dict | None=None) -> list[dict[str, Any]]:
     """Signal on recovery of a previously broken rolling return correlation.
 
     The lagging asset is identified by the relative cumulative return over the
     same lookback. Pair observations are forward-filled by timestamp only.
     """
-    _validate(rows,("close",))
-    _validate(pair_rows,("close",))
+    _validate(rows,("close",)); _validate(pair_rows,("close",))
     p=params or {}
     window=int(p.get("window",30))
     break_thr=float(p.get("break_thr",0.4))
@@ -181,38 +193,60 @@ def correlation_break_recovery(
         raise ValueError("invalid correlation-break parameters")
     aligned=[]
     j=0; last=None
-    for r in rows:
-        while j<len(pair_rows) and pair_rows[j]["timestamp"]<=r["timestamp"]:
+    for row in rows:
+        while j<len(pair_rows) and pair_rows[j]["timestamp"]<=row["timestamp"]:
             last=float(pair_rows[j]["close"]); j+=1
         aligned.append(last)
-    x=[float(r["close"]) for r in rows]
-    ret_x=[None]+[x[i]/x[i-1]-1 if x[i-1]>0 else None for i in range(1,len(x))]
-    ret_y=[None]+[aligned[i]/aligned[i-1]-1 if i>0 and aligned[i-1] is not None and aligned[i] is not None and aligned[i-1]>0 else None for i in range(1,len(x))]
+    close_x=[float(row["close"]) for row in rows]
+    ret_x=[None]+[close_x[i]/close_x[i-1]-1 if close_x[i-1]>0 else None for i in range(1,len(rows))]
+    ret_y=[None]+[
+        aligned[i]/aligned[i-1]-1
+        if i>0 and aligned[i-1] is not None and aligned[i] is not None and aligned[i-1]>0
+        else None for i in range(1,len(rows))
+    ]
     corr=[None]*len(rows)
-    for i in range(window,len(rows)):
-        xs=ret_x[i-window+1:i+1]; ys=ret_y[i-window+1:i+1]
-        pairs=[(a,b) for a,b in zip(xs,ys) if a is not None and b is not None]
-        if len(pairs)<window:
-            continue
-        mx=sum(a for a,_ in pairs)/len(pairs); my=sum(b for _,b in pairs)/len(pairs)
-        vx=sum((a-mx)**2 for a,_ in pairs); vy=sum((b-my)**2 for _,b in pairs)
-        if vx<=0 or vy<=0: continue
-        cov=sum((a-mx)*(b-my) for a,b in pairs)
-        corr[i]=cov/(vx*vy)**0.5
-    out=[]; cond_hist=[]
-    for i,r in enumerate(rows):
-        lo=max(0,i-window+1)
-        hist=[v for v in corr[lo:i+1] if v is not None]
-        was_broken=len(hist)>=window and min(hist)<break_thr
-        recovering=corr[i] is not None and corr[i]>recovery
+    pair_window: deque[tuple[float,float] | None]=deque()
+    sx=sy=sxx=syy=sxy=0.0
+    count=0
+    for i,(a,b) in enumerate(zip(ret_x,ret_y)):
+        item=(a,b) if a is not None and b is not None else None
+        pair_window.append(item)
+        if item is not None:
+            ax,by=item; sx+=ax; sy+=by; sxx+=ax*ax; syy+=by*by; sxy+=ax*by; count+=1
+        if len(pair_window)>window:
+            old=pair_window.popleft()
+            if old is not None:
+                ax,by=old; sx-=ax; sy-=by; sxx-=ax*ax; syy-=by*by; sxy-=ax*by; count-=1
+        if len(pair_window)==window and count==window:
+            vx=sxx-sx*sx/count; vy=syy-sy*sy/count
+            if vx>0 and vy>0:
+                cov=sxy-sx*sy/count
+                corr[i]=cov/(vx*vy)**0.5
+    min_q: deque[int]=deque()
+    corr_count=0
+    out=[]; conditions=[]
+    for i,row in enumerate(rows):
+        expired=i-window
+        if expired>=0 and corr[expired] is not None:
+            corr_count-=1
+        while min_q and min_q[0]<=expired:
+            min_q.popleft()
+        value=corr[i]
+        if value is not None:
+            corr_count+=1
+            while min_q and corr[min_q[-1]]>=value:
+                min_q.pop()
+            min_q.append(i)
+        was_broken=(len(min_q)>0 and corr_count==window and corr[min_q[0]]<break_thr)
+        recovering=value is not None and value>recovery
         condition=was_broken and recovering
-        edge=condition and (i==0 or not cond_hist[-1])
-        cond_hist.append(condition)
+        edge=condition and (i==0 or not conditions[-1])
+        conditions.append(condition)
         if i>=window and aligned[i] is not None and aligned[i-window] is not None and aligned[i-window]>0:
-            rel=(x[i]/x[i-window]-1)-(aligned[i]/aligned[i-window]-1)
+            relative=(close_x[i]/close_x[i-window]-1)-(aligned[i]/aligned[i-window]-1)
         else:
-            rel=None
-        score=0.0 if not edge or rel is None else max(-1.0,min(1.0,-rel/scale))
-        out.append({"timestamp":r["timestamp"],"direction":1 if score>0 else (-1 if score<0 else 0),
+            relative=None
+        score=0.0 if not edge or relative is None else max(-1.0,min(1.0,-relative/scale))
+        out.append({"timestamp":row["timestamp"],"direction":1 if score>0 else (-1 if score<0 else 0),
                     "score":score,"mechanism":"correlation_break_recovery"})
     return out
