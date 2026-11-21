@@ -39,3 +39,7 @@ The dedicated GitHub Actions workflow compiles the imported modules and runs the
 ## Audit count
 
 Five distinct mechanisms passed source-level mechanism review and have been imported as research modules. OI remains conditional and is not promoted. These are code-level imports only; no historical backtest or profitability claim is made. The 100-candidate source audit remains incomplete.
+
+## Additional source audit — batch 02
+
+See [AUDIT_BATCH_02.md](AUDIT_BATCH_02.md). Climax Fade and Momentum Decay passed mechanism/source review but are not promoted because the current adapter cannot exactly reproduce their stateful exit and cooldown logic. The BTC-to-alt tick divergence candidate was deduplicated against the already-counted momentum-cascade concept. Conventional trend and envelope-breakout variants were not counted as new independent engines. No new backtest was started.
