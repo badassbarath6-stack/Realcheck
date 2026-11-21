@@ -41,6 +41,7 @@ def strategy_spec(name):
             "sl_pct":[0.01,0.02],
             "tp_pct":[0.02,0.035],
         })
+        grid=[p for p in grid if p["tp_pct"]>p["sl_pct"]]
         def signal(rows,p):
             return taker_buy_pressure_momentum(rows,ma_period=p["ma_period"],
                 confirm_bars=p["confirm_bars"],threshold_high=p["threshold_high"],
