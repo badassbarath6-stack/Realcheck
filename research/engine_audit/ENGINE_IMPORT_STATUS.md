@@ -115,3 +115,18 @@ See [AUDIT_BATCH_08.md](AUDIT_BATCH_08.md). Batch 08 adds one conditional mechan
 - 34 distinct mechanisms have passed or conditionally passed source/mechanism review across Batches 01–08.
 - 66 more distinct mechanisms must be audited before the requested 100-mechanism gate is met.
 - No historical backtest has started.
+
+
+## Backtest infrastructure preparation (not a backtest run)
+
+A separate source-style research path is now implemented:
+
+- \`prepare_binance_feature_csv.py\`: reads Binance M1 archives, validates OHLCV/taker-buy fields and continuity, resamples to native 5m/15m/30m/1h/2h/4h bars, recomputes buy ratio from summed taker-buy and total base volume, and backward-as-of joins funding at the resampled candle OPEN.
+- \`prepare_metrics_features.py\`: backward-as-of joins OI and taker long/short volume ratio metrics at candle OPEN and retains independent observation-age columns.
+- \`source_backtest.py\`: next-open entries, hold-bar exits, stop-first SL/TP, long-only source exit flags, conservative gap handling or source-compatible fills, and train-only walk-forward selection. Signal grids are compressed to one byte per bar to avoid excessive memory on multi-asset grids.
+- \`run_walk_forward.py\`: native source timeframes and parameter grids for funding mean reversion (81 configs, 15m), taker-buy momentum (108 valid configs, 5m), and OI/price quadrants (216 configs, 15m). It checks prefix invariance for every parameter set before walk-forward.
+- Funding history older than 24 hours and OI/taker metrics older than 15 minutes are rejected by default. OI backtesting therefore requires continuous historical metrics; a short recent API window must not be forward-filled over a multi-year sample.
+
+The upstream taker notebook selects SL/TP by comparing OOS Sharpe across separate walk-forward runs. That is OOS leakage. The Realcheck runner includes SL/TP in the training parameter grid and selects them on training data only. It also offers source-compatible fills for comparison, while defaulting to the user's existing conservative 5 bps fee + 2 bps slippage per side and conservative stop-gap handling.
+
+The earlier \`run_csv_backtest.py\` is a smoke/adapter runner, not the final source-style walk-forward benchmark. No backtest has been started; the 100-mechanism audit gate remains in force.
