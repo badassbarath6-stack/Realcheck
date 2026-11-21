@@ -60,8 +60,9 @@ def merge_metrics(candle_csv: Path, metrics, output: Path):
     metric_times=[x[0] for x in metrics]
     oi_values=[]; ls_values=[]
     mi=0; last_oi=last_ls=""
+    last_oi_ts=last_ls_ts=None
     fields=list(candles[0])
-    for col in ("open_interest","taker_ls_vol_ratio"):
+    for col in ("open_interest","taker_ls_vol_ratio","open_interest_age_ms","taker_ls_age_ms"):
         if col not in fields: fields.append(col)
     output.parent.mkdir(parents=True,exist_ok=True)
     with output.open("w",newline="") as f:
@@ -70,11 +71,13 @@ def merge_metrics(candle_csv: Path, metrics, output: Path):
             ts=int(float(row["timestamp"]))
             while mi<len(metrics) and metric_times[mi]<=ts:
                 _,oi,ls=metrics[mi]
-                if oi is not None: last_oi=oi
-                if ls is not None: last_ls=ls
+                if oi is not None: last_oi=oi; last_oi_ts=metrics[mi][0]
+                if ls is not None: last_ls=ls; last_ls_ts=metrics[mi][0]
                 mi+=1
             row["open_interest"]=last_oi
             row["taker_ls_vol_ratio"]=last_ls
+            row["open_interest_age_ms"]="" if last_oi_ts is None else ts-last_oi_ts
+            row["taker_ls_age_ms"]="" if last_ls_ts is None else ts-last_ls_ts
             writer.writerow(row)
             oi_values.append(last_oi!="")
             ls_values.append(last_ls!="")
