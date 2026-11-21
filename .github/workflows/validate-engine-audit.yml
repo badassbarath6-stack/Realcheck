@@ -6,6 +6,7 @@ on:
     paths:
       - "research/engine_audit/**"
       - "tests/research/test_engine_audit.py"
+      - "tests/research/test_price_action_engines.py"
       - ".github/workflows/validate-engine-audit.yml"
   workflow_dispatch:
 permissions:
@@ -21,8 +22,8 @@ jobs:
         with:
           python-version: "3.12"
       - name: Compile modules
-        run: python -m py_compile research/engine_audit/engines.py research/engine_audit/adapter.py tests/research/test_engine_audit.py
+        run: python -m py_compile research/engine_audit/*.py tests/research/test_engine_audit.py tests/research/test_price_action_engines.py
       - name: Run existing research regression tests
         run: python -m unittest discover -s tests/research -v
       - name: Run audited engine tests
-        run: python -m unittest discover -s tests/research -p 'test_engine_audit.py' -v
+        run: python -m unittest discover -s tests/research -v
