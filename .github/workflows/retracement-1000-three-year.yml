@@ -31,9 +31,9 @@ jobs:
       - name: Verify exactly 1000 retracement values
         run: |
           python - <<'PY'
-          import importlib.util
-          s=importlib.util.spec_from_file_location("runner","research/retracement_1000_three_year_backtest.py")
-          m=importlib.util.module_from_spec(s); s.loader.exec_module(m)
+          import sys
+          sys.path.insert(0, "research")
+          import retracement_1000_three_year_backtest as m
           assert len(m.RETRACEMENTS)==1000
           assert abs(m.RETRACEMENTS[0]-0.001)<1e-12
           assert abs(m.RETRACEMENTS[-1]-1.0)<1e-12
