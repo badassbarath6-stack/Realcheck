@@ -53,3 +53,6 @@ Batch 05 adds four source-reviewed mechanisms. The cumulative accepted/condition
 - WallBounceDetector is held conditional because the source proximity test can accept a wall on the wrong side of price.
 
 The cumulative accepted/conditional source-review count is 31 of 100; 69 remain. See [AUDIT_BATCH_06.md](AUDIT_BATCH_06.md). No historical backtest has started.
+
+
+Batch 07 adds two conditional mechanisms. The cumulative accepted/conditional source-review count is 33 of 100; 67 remain. See [AUDIT_BATCH_07.md](AUDIT_BATCH_07.md). No historical backtest has started.
