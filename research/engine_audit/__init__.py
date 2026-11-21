@@ -1,1 +1,1 @@
-"""Source-audited strategy research package."""\n
+"""Source-audited strategy research package."""
