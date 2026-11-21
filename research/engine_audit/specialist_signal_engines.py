@@ -60,18 +60,18 @@ def _rolling_mean_std(values: Sequence[float | None], window: int, min_periods: 
     q: deque[float]=deque()
     total=0.0
     total_sq=0.0
+    count=0
     means=[]; stds=[]
     for value in values:
         if value is not None:
             x=float(value)
-            q.append(x); total+=x; total_sq+=x*x
+            q.append(x); total+=x; total_sq+=x*x; count+=1
         else:
             q.append(float("nan"))
         if len(q)>window:
             old=q.popleft()
             if old==old:
-                total-=old; total_sq-=old*old
-        count=sum(1 for x in q if x==x) if len(q)<=window else 0
+                total-=old; total_sq-=old*old; count-=1
         if count<min_periods:
             means.append(None); stds.append(None); continue
         mean=total/count
@@ -122,8 +122,8 @@ def wall_pull_detector(rows: Sequence[Mapping[str, Any]], params: dict | None=No
         raise ValueError("invalid wall-pull parameters")
     sides={}
     for side,sign in (("offer",1),("bid",-1)):
-        quantities=[_num(row,f"{side}_wall_qty") for row in rows]
-        prices=[_num(row,f"{side}_wall_price") for row in rows]
+        quantities=[(_num(row,f"{side}_wall_qty") if _num(row,f"{side}_wall_qty") not in (None,0.0) else None) for row in rows]
+        prices=[(_num(row,f"{side}_wall_price") if _num(row,f"{side}_wall_price") not in (None,0.0) else None) for row in rows]
         peaks=_rolling_max(quantities,window,min_periods=5)
         near=[]
         for i,row in enumerate(rows):
@@ -160,13 +160,13 @@ def book_imbalance_zscore(rows: Sequence[Mapping[str, Any]], params: dict | None
     p=params or {}
     window=int(p.get("window",240))
     max_z=float(p.get("max_z",3.0))
-    if window<2 or max_z<=0:
+    if window<60 or max_z<=0:
         raise ValueError("invalid book-imbalance parameters")
     ratio=[]
     for row in rows:
         bid=_num(row,"bid_total"); ask=_num(row,"offer_total")
         ratio.append(log(bid/ask) if bid is not None and ask is not None and bid>0 and ask>0 else None)
-    mean,std=_rolling_mean_std(ratio,window,min_periods=min(60,window))
+    mean,std=_rolling_mean_std(ratio,window,min_periods=60)
     out=[]
     for i,row in enumerate(rows):
         z=None if mean[i] is None or std[i] in (None,0) or ratio[i] is None else (ratio[i]-mean[i])/std[i]
