@@ -11,6 +11,8 @@ This branch is isolated from the approved Impulse Retracer runner and production
 | Spot/perpetual funding carry | Positive funding threshold creates matched spot-long/perp-short sleeve | Spot close, perp funding, realized volatility | Imported as a matched hedge sleeve; spot feed and settlement cashflows required |
 | Avellaneda–Stoikov funding-aware market making | Inventory-skewed reservation price, funding tilt, book-imbalance tilt, A-S spread and inventory caps | L1/L2 book, timestamps, fills, inventory, funding | Quote model imported; requires event-driven queue/fill simulation |
 | Dated-futures cash-and-carry | Annualized delivery basis net of financing and both-leg fees | Spot, dated futures mark, expiry, borrow APR, contract specs | Economics module imported; requires expiry-aware execution/rehedge adapter |
+| RSI pivot divergence | Confirmed price pivot divergence against RSI; signal only after right-side pivot confirmation | OHLC | Imported and registered; needs next-bar fill and pivot-confirmation delay preserved |
+| Volume/range exhaustion | Large directional move followed by cooling volume and candle range | OHLCV | Imported and registered; needs volume feed and next-bar fill |
 
 ## Conditional / rejected / held out
 
@@ -38,8 +40,18 @@ The dedicated GitHub Actions workflow compiles the imported modules and runs the
 
 ## Audit count
 
-Five distinct mechanisms passed source-level mechanism review and have been imported as research modules. OI remains conditional and is not promoted. These are code-level imports only; no historical backtest or profitability claim is made. The 100-candidate source audit remains incomplete.
+Seven distinct mechanisms have source-derived research modules in this branch (five specialist modules from Batch 01 plus RSI pivot divergence and volume/range exhaustion). Four are registered in the directional CSV runner; the specialist carry, market-making and delivery-basis modules require their own portfolio or event-driven execution adapters. Two additional Batch 02 mechanisms (Climax Fade and Momentum Decay) passed source review but are not imported because their stateful exits/cooldowns are not represented by the generic adapter. Batch 03 adds one source-verified dated-futures calendar-spread mechanism, but it is not imported until dated-curve data and two-leg contract accounting exist. OI remains conditional. These are code-level imports only; no historical backtest or profitability claim is made. The 100-candidate source audit remains incomplete.
 
 ## Additional source audit — batch 02
 
 See [AUDIT_BATCH_02.md](AUDIT_BATCH_02.md). Climax Fade and Momentum Decay passed mechanism/source review but are not promoted because the current adapter cannot exactly reproduce their stateful exit and cooldown logic. The BTC-to-alt tick divergence candidate was deduplicated against the already-counted momentum-cascade concept. Conventional trend and envelope-breakout variants were not counted as new independent engines. No new backtest was started.
+
+
+## Current source audit count (through Batch 03)
+
+- 8 distinct source-reviewed mechanism families accepted at mechanism level: 5 from Batch 01, 2 from Batch 02, and 1 from Batch 03.
+- 7 have source-derived research modules in the branch; 4 are registered for directional candle CSV testing.
+- 3 accepted mechanisms remain unpromoted pending stateful execution or specialist data/contract accounting: Climax Fade, Momentum Decay, dated-futures calendar spread.
+- OI/price quadrant remains conditional; duplicates, defects and out-of-scope options are not counted.
+- No 100-mechanism completion claim and no strategy backtest has been started.
+- Batch 03 report: [AUDIT_BATCH_03.md](AUDIT_BATCH_03.md).
