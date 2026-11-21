@@ -46,7 +46,7 @@ def load_rows(path: Path):
         for k in ("open","high","low","close"):
             item[k]=float(r[k])
         for k in ("funding_rate","buy_ratio","open_interest","taker_ls_vol_ratio",
-                  "realized_vol_30d","volume","taker_buy_base_volume",
+                  "realized_vol_30d","volume","funding_age_ms","open_interest_age_ms","taker_ls_age_ms","taker_buy_base_volume",
                   "taker_buy_base_asset_volume"):
             if r.get(k,"") not in ("",None):
                 item[k]=float(r[k])
