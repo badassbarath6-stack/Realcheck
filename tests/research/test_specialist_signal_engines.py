@@ -11,6 +11,10 @@ class SpecialistSignalEngineTests(unittest.TestCase):
         ]
         sig=round_number_bounce(rows,{"level_step_frac":0.1,"touch_threshold":0.01})
         self.assertEqual(sig[-1]["direction"],1)
+        resistance=[{"timestamp":3,"close":108.0,"low":107.0,"high":111.0}]
+        exit_sig=round_number_bounce(resistance,{"level_step_frac":0.1,"touch_threshold":0.003})[0]
+        self.assertEqual(exit_sig["direction"],0)
+        self.assertTrue(exit_sig["exit_long"])
 
     def test_wall_pull_only_emits_on_event_edge(self):
         rows=[]
