@@ -14,6 +14,7 @@ HERE=Path(__file__).resolve().parent
 sys.path.insert(0,str(HERE))
 from engines import funding_rate_mean_reversion, taker_buy_pressure_momentum
 from price_action_engines import rsi_pivot_divergence, volume_range_exhaustion
+from specialist_signal_engines import round_number_bounce
 from adapter import run_directional_signals
 
 ENGINES={
@@ -21,6 +22,7 @@ ENGINES={
     "taker_buy_pressure_momentum": taker_buy_pressure_momentum,
     "rsi_pivot_divergence": rsi_pivot_divergence,
     "volume_range_exhaustion": volume_range_exhaustion,
+    "round_number_bounce": round_number_bounce,
 }
 REQUIRED=("open","high","low","close")
 
