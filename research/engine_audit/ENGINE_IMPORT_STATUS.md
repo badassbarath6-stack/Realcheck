@@ -104,3 +104,14 @@ See [AUDIT_BATCH_07.md](AUDIT_BATCH_07.md). Batch 07 adds two conditional mechan
 - 33 distinct mechanisms have passed or conditionally passed source/mechanism review across Batches 01–07.
 - 67 more distinct mechanisms must be audited before the requested 100-mechanism gate is met.
 - No historical backtest has started.
+
+
+## Source audit — Batch 08
+
+See [AUDIT_BATCH_08.md](AUDIT_BATCH_08.md). Batch 08 adds one conditional mechanism: ETF-flow / stablecoin-supply liquidity regime. It is not imported because the notebook's flow fixture is synthetic and needs real point-in-time flow histories. A distinct DXY/rates macro filter is rejected on the notebook's own multiple-testing and after-cost results; liquidation stress is deduplicated with volume-climax; remaining notebooks are duplicates or outside perpetual-futures scope.
+
+## Current source-audit count (through Batch 08)
+
+- 34 distinct mechanisms have passed or conditionally passed source/mechanism review across Batches 01–08.
+- 66 more distinct mechanisms must be audited before the requested 100-mechanism gate is met.
+- No historical backtest has started.
