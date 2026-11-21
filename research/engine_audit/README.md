@@ -40,3 +40,6 @@ adapters must pass their own tests before any results are reported.
 ## Latest source audit
 
 Batch 04 adds 15 distinct source-reviewed mechanisms. See [AUDIT_BATCH_04.md](AUDIT_BATCH_04.md) for exact source files, rule definitions, deduplication decisions, defects, licensing and import boundaries. The cumulative accepted/conditional source-review count is 23 of the requested 100. No historical backtest has started.
+
+
+Batch 05 adds four source-reviewed mechanisms. The cumulative accepted/conditional source-review count is 27 of the requested 100; 73 remain. See [AUDIT_BATCH_05.md](AUDIT_BATCH_05.md). No historical backtest has started.
