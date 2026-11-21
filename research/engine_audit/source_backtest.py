@@ -21,7 +21,23 @@ from typing import Any, Callable, Mapping, Sequence
 def _signal_record(value: Any) -> dict[str, Any]:
     if isinstance(value, Mapping):
         return dict(value)
+    if isinstance(value,int) and value>=16:
+        bits=value-16
+        direction=1 if (bits&3)==1 else (-1 if (bits&3)==2 else 0)
+        return {"direction":direction,"exit_long":bool(bits&4),"exit_short":bool(bits&8)}
     return {"direction": int(value)}
+
+
+def _encode_signals(values: Sequence[Any]) -> bytearray:
+    """Compact each signal into one byte to bound memory for large grids."""
+    encoded=bytearray()
+    for value in values:
+        rec=_signal_record(value)
+        side=int(rec.get("direction",0))
+        direction_code=1 if side==1 else (2 if side==-1 else 0)
+        bits=direction_code | (4 if rec.get("exit_long") else 0) | (8 if rec.get("exit_short") else 0)
+        encoded.append(16+bits)
+    return encoded
 
 
 def _side(value: Any) -> int:
@@ -33,13 +49,13 @@ def _side(value: Any) -> int:
 
 
 def validate_prefix_invariance(signal_fn: Callable, bars: Sequence[Mapping[str, Any]], params: dict,
-                                prefix_length: int | None=None) -> None:
+                                prefix_length: int | None=None, full_signals: Sequence[Any] | None=None) -> None:
     """Reject signals whose earlier outputs change when future rows are removed."""
     if len(bars)<3:
         return
     cut=prefix_length if prefix_length is not None else max(2,int(len(bars)*0.7))
     cut=min(max(2,cut),len(bars)-1)
-    full=list(signal_fn(bars,params))
+    full=list(full_signals) if full_signals is not None else list(signal_fn(bars,params))
     prefix=list(signal_fn(bars[:cut],params))
     if len(full)!=len(bars) or len(prefix)!=cut:
         raise ValueError("signal function returned an invalid length during prefix-causality check")
@@ -271,12 +287,12 @@ def walk_forward(
              "30m":252*24*2,"1h":252*24,"2h":252*12,"4h":252*6}[timeframe]
     all_signals=[]
     for params in parameter_grid:
-        sig=list(signal_fn(bars,params))
-        if len(sig)!=len(bars):
+        raw_signals=list(signal_fn(bars,params))
+        if len(raw_signals)!=len(bars):
             raise ValueError("signal_fn output length does not match bars")
         if check_prefix:
-            validate_prefix_invariance(signal_fn,bars,params)
-        all_signals.append(sig)
+            validate_prefix_invariance(signal_fn,bars,params,full_signals=raw_signals)
+        all_signals.append(_encode_signals(raw_signals))
 
     windows=make_walk_forward_windows(bars,train_months=train_months,
         test_months=test_months,step_months=step_months)
