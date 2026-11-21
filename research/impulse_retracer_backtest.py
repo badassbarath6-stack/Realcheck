@@ -10,7 +10,7 @@ START_MS=int(datetime(2021,11,20,tzinfo=timezone.utc).timestamp()*1000)
 END_MS=int(datetime(2026,11,20,tzinfo=timezone.utc).timestamp()*1000)
 BASE="https://data.binance.vision/data/futures/um"
 TIMEFRAMES={"5m":5,"15m":15,"30m":30,"1h":60,"2h":120,"4h":240}
-ATR_PERIODS=(14,); THRESHOLDS=(2.4,)
+ATR_PERIODS=(14,); THRESHOLDS=(2.4,2.6,2.8,3.0)
 RETRACEMENTS=tuple(x/100 for x in range(0,100,5))
 BUFFERS=(1.,1.5,2.,2.5,3.)
 RRS=(2.,2.2,2.4,2.6,2.8,3.,3.5,4.,4.5,5.,5.5,6.)
@@ -358,7 +358,7 @@ def run_pair(symbol,tf,data_dir,out_dir):
     manifest={"symbol":symbol,"timeframe":tf,"start_utc":"2021-11-20T00:00:00Z","end_utc_exclusive":"2026-11-20T00:00:00Z",
               "configurations":len(configurations()),"config_grid":{"atr_periods":ATR_PERIODS,"impulse_atr_multipliers":THRESHOLDS,
               "retracements":RETRACEMENTS,"sl_buffers_atr":BUFFERS,"reward_risk":RRS,
-              "pending_expiry_complete_bars":3,"configuration_count_expected":1200,"selection":"independent_per_configuration; no cross-configuration winner selection"},"code_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
+              "pending_expiry_complete_bars":3,"configuration_count_expected":4800,"selection":"independent_per_configuration; no cross-configuration winner selection"},"code_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
               "m1_rows":len(m1),"m1_gap_count":len(gaps),
               "first_gaps":gaps[:100],"timeframe_bars":len(tf_bars),"candidate_trades":len(candidates),
               "selected_trades":{"train":len(train),"validation":len(validation),"oos":len(oos)},
