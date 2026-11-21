@@ -1,0 +1,28 @@
+name: Validate Audited Strategy Modules
+on:
+  push:
+    branches:
+      - research/100-mechanism-audit-import
+    paths:
+      - "research/engine_audit/**"
+      - "tests/research/test_engine_audit.py"
+      - ".github/workflows/validate-engine-audit.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/100-mechanism-audit-import
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile modules
+        run: python -m py_compile research/engine_audit/engines.py research/engine_audit/adapter.py tests/research/test_engine_audit.py
+      - name: Run existing research regression tests
+        run: python -m unittest discover -s tests/research -v
+      - name: Run audited engine tests
+        run: python -m unittest discover -s tests/research -p 'test_engine_audit.py' -v
