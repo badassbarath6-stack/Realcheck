@@ -122,7 +122,10 @@ def volume_range_exhaustion(rows: Sequence[Mapping[str, Any]], params: dict | No
         raise ValueError("invalid exhaustion parameters")
     close = [float(r["close"]) for r in rows]
     volume = [float(r["volume"]) for r in rows]
-    \n    if any(float(r["close"]) <= 0 for r in rows):\n        raise ValueError("close must be positive for range normalization")\n    ranges = [(float(r["high"])-float(r["low"]))/float(r["close"]) for r in rows]
+    
+    if any(float(r["close"]) <= 0 for r in rows):
+        raise ValueError("close must be positive for range normalization")
+    ranges = [(float(r["high"])-float(r["low"]))/float(r["close"]) for r in rows]
     vfast, vslow = _rolling_mean(volume, vol_fast), _rolling_mean(volume, vol_slow)
     rfast, rslow = _rolling_mean(ranges, vol_fast), _rolling_mean(ranges, vol_slow)
     out=[]
