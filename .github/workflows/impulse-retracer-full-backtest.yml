@@ -5,6 +5,8 @@ on:
       - research/mtf-top100-two-year
     paths:
       - "research/LAUNCH_BACKTEST"
+      - "research/impulse_retracer_backtest.py"
+      - "research/aggregate_results.py"
       - ".github/workflows/impulse-retracer-full-backtest.yml"
   workflow_dispatch:
 concurrency:
