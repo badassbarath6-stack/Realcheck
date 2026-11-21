@@ -14,21 +14,21 @@ for fn in files:
 if len(rows)!=12*46*23:raise SystemExit(f"Expected 12696 pair configs, got {len(rows)}")
 def agg_key(rs):
  n=sum(int(float(r["validation_trades"])) for r in rs)
- gp=sum(float(r["validation_gross_profit_bps"]) for r in rs)
- gl=sum(float(r["validation_gross_loss_bps"]) for r in rs)
+ gp=sum(float(r["validation_net_profit_bps"]) for r in rs)
+ gl=sum(float(r["validation_net_loss_bps"]) for r in rs)
  sgp=sum(float(r["validation_stress7_net_bps"]) for r in rs if float(r["validation_stress7_net_bps"])>0)
  # Aggregate stress PF is recomputed from trade-level gross profit/loss unavailable in this compact CSV;
  # use stress net bps and normal PF as complementary diagnostics.
  net=sum(float(r["validation_net_bps"]) for r in rs)
  oosn=sum(int(float(r["oos_trades"])) for r in rs)
- oosgp=sum(float(r["oos_gross_profit_bps"]) for r in rs)
- oosgl=sum(float(r["oos_gross_loss_bps"]) for r in rs)
+ oosgp=sum(float(r["oos_net_profit_bps"]) for r in rs)
+ oosgl=sum(float(r["oos_net_loss_bps"]) for r in rs)
  oosnet=sum(float(r["oos_net_bps"]) for r in rs)
  stressnet=sum(float(r["oos_stress7_net_bps"]) for r in rs)
  return {"validation_trades":n,"validation_pf":gp/gl if gl else (999.0 if gp else 0.0),
-         "validation_net_bps":net,"oos_trades":oosn,
+         "validation_net_bps":net,"validation_stress7_pf":sum(float(r["validation_stress7_net_profit_bps"]) for r in rs)/sum(float(r["validation_stress7_net_loss_bps"]) for r in rs) if sum(float(r["validation_stress7_net_loss_bps"]) for r in rs)>0 else 0.0,"oos_trades":oosn,
          "oos_pf":oosgp/oosgl if oosgl else (999.0 if oosgp else 0.0),
-         "oos_net_bps":oosnet,"oos_stress7_net_bps":stressnet,
+         "oos_net_bps":oosnet,"oos_stress7_net_bps":stressnet,"oos_stress7_pf":sum(float(r["oos_stress7_net_profit_bps"]) for r in rs)/sum(float(r["oos_stress7_net_loss_bps"]) for r in rs) if sum(float(r["oos_stress7_net_loss_bps"]) for r in rs)>0 else 0.0,
          "pair_tf_positive_validation":sum(float(r["validation_pf"])>1 for r in rs),
          "pair_tf_positive_oos":sum(float(r["oos_pf"])>1 for r in rs),
          "pair_tf_positive_stress_oos":sum(float(r["oos_stress7_pf"])>1 for r in rs)}
