@@ -32,6 +32,21 @@ def _side(value: Any) -> int:
     return side if side in (-1,1) else 0
 
 
+def validate_prefix_invariance(signal_fn: Callable, bars: Sequence[Mapping[str, Any]], params: dict,
+                                prefix_length: int | None=None) -> None:
+    """Reject signals whose earlier outputs change when future rows are removed."""
+    if len(bars)<3:
+        return
+    cut=prefix_length if prefix_length is not None else max(2,int(len(bars)*0.7))
+    cut=min(max(2,cut),len(bars)-1)
+    full=list(signal_fn(bars,params))
+    prefix=list(signal_fn(bars[:cut],params))
+    if len(full)!=len(bars) or len(prefix)!=cut:
+        raise ValueError("signal function returned an invalid length during prefix-causality check")
+    if full[:cut]!=prefix:
+        raise ValueError("look-ahead detected: prefix signals changed after future rows were removed")
+
+
 def run_trades(
     bars: Sequence[Mapping[str, Any]],
     signals: Sequence[Any],
@@ -238,6 +253,7 @@ def walk_forward(
     fee_bps_per_side: float=5.0,
     slippage_bps_per_side: float=2.0,
     fill_model: str="conservative",
+    check_prefix: bool=True,
 ) -> dict[str,Any]:
     """Train-only parameter selection with contiguous out-of-sample windows.
 
@@ -258,6 +274,8 @@ def walk_forward(
         sig=list(signal_fn(bars,params))
         if len(sig)!=len(bars):
             raise ValueError("signal_fn output length does not match bars")
+        if check_prefix:
+            validate_prefix_invariance(signal_fn,bars,params)
         all_signals.append(sig)
 
     windows=make_walk_forward_windows(bars,train_months=train_months,
@@ -268,6 +286,7 @@ def walk_forward(
     import bisect
     all_oos_trades=[]
     oos_changes=[0.0]*len(bars)
+    oos_bar_indices=[]
     window_rows=[]
     for wi,window in enumerate(windows):
         tr0=bisect.bisect_left(times,window["train_start"])
@@ -278,6 +297,7 @@ def walk_forward(
         test_bars=bars[te0:te1]
         best_score=-999.0
         best_params=parameter_grid[0]
+        best_pi=0
         best_train_trades=[]
         for pi,params in enumerate(parameter_grid):
             train_signals=all_signals[pi][tr0:tr1]
@@ -293,14 +313,15 @@ def walk_forward(
                 eq=trades_to_equity(len(train_bars),trades)
                 score=_sharpe(eq,periods)
             if score>best_score:
-                best_score=score; best_params=params; best_train_trades=trades
-        pi=parameter_grid.index(best_params)
+                best_score=score; best_params=params; best_pi=pi; best_train_trades=trades
+        pi=best_pi
         test_signals=all_signals[pi][te0:te1]
         test_trades=run_trades(test_bars,test_signals,
             hold_bars=int(best_params.get("hold_bars",16)),
             sl_pct=best_params.get("sl_pct"),tp_pct=best_params.get("tp_pct"),
             fee_bps_per_side=fee_bps_per_side,slippage_bps_per_side=slippage_bps_per_side,
             fill_model=fill_model)
+        oos_bar_indices.extend(range(te0,te1))
         for trade in test_trades:
             trade["window_index"]=wi
             trade["params"]=dict(best_params)
@@ -323,7 +344,12 @@ def walk_forward(
     peak=0.0; running=0.0; max_dd=0.0
     for x in oos_changes:
         running+=x; peak=max(peak,running); max_dd=max(max_dd,peak-running)
+    oos_series=[]; oos_running=0.0
+    for index in oos_bar_indices:
+        oos_running+=oos_changes[index]
+        oos_series.append(oos_running)
     summary={
+        "sharpe":_sharpe(oos_series,periods),
         "trades":len(net),"wins":sum(x>0 for x in net),"losses":sum(x<=0 for x in net),
         "win_rate":sum(x>0 for x in net)/len(net) if net else 0.0,
         "gross_profit_bps":gp,"gross_loss_bps":gl,
