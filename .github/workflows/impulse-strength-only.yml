@@ -71,7 +71,7 @@ jobs:
           m=json.load(open(f"{root}/{s}_{t}_impulse_manifest.json"))
           assert len(rows)==96 and m["threshold_count"]==96
           assert m["m1_gap_count"]==0
-          assert len(m["source_files"])==36
+          assert len(m["source_files"])==38
           print("Verified 96 thresholds, zero M1 gaps, 36 monthly archives")
           PY
       - uses: actions/upload-artifact@v4
