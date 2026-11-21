@@ -77,3 +77,14 @@ python research/engine_audit/run_walk_forward.py \\
 \`\`\`
 
 Taker momentum requires a 5m feature CSV. OI divergence requires a 15m feature CSV plus timestamped metrics merged with \`prepare_metrics_features.py\`; stale metrics fail closed. The walk-forward runner defaults to the established conservative 5 bps fee and 2 bps slippage per side, and it selects all parameters using training data only. These commands are preparation examples, not evidence that any backtest has run.
+
+
+## Source audit continuation
+
+- [Batch 09](AUDIT_BATCH_09.md): +2 OI-confirmed crash mechanisms; L2 taker/maker variants deduplicated.
+- [Batch 10](AUDIT_BATCH_10.md): +1 conditional Deribit DVOL complacency regime; CVD absorption and spot/perp CVD leadership audited and rejected for promotion.
+- [Batch 11](AUDIT_BATCH_11.md): +1 volatility-scaled cross-sectional price-momentum portfolio.
+- [Batch 12](AUDIT_BATCH_12.md): +4 adaptive grid and volume-profile mechanisms.
+- [Batch 13](AUDIT_BATCH_13.md): +2 conditional stablecoin-supply and on-chain exchange-netflow factors.
+
+Cumulative accepted/conditional source-review count: **44 of 100; 56 remain**. The audit gate is not yet satisfied. No Realcheck historical backtest has started. The existing directional CSV runner and isolated specialist registries are not evidence of a full strategy import or a backtest result.
