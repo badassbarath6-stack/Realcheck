@@ -159,9 +159,9 @@ def simulate_grid(m1_t,m1_o,m1_h,m1_l,m1_c,events,sl_values,rr_values,split1,spl
 def metrics_row(a):
  n=int(a[0]);wins=int(a[1]);gp=a[2];gl=a[3];net=a[4]
  return {"trades":n,"wins":wins,"losses":n-wins,"win_rate":wins/n if n else 0.0,
-         "gross_profit_bps":gp,"gross_loss_bps":gl,"net_bps":net,
+         "net_profit_bps":gp,"net_loss_bps":gl,"net_bps":net,
          "pf":gp/gl if gl else (999.0 if gp else 0.0),"expectancy_bps":net/n if n else 0.0,
-         "max_drawdown_bps":a[8],"stress7_net_bps":a[7],
+         "max_drawdown_bps":a[8],"stress7_net_profit_bps":a[5],"stress7_net_loss_bps":a[6],"stress7_net_bps":a[7],
          "stress7_pf":a[5]/a[6] if a[6] else (999.0 if a[5] else 0.0)}
 
 def run(symbol,tf,data_dir,out_dir):
