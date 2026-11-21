@@ -85,14 +85,16 @@ def rsi_pivot_divergence(rows: Sequence[Mapping[str, Any]], params: dict | None 
                 prev_i = last_low
                 if pivot - prev_i <= max_gap and _finite(rsi[pivot]) and _finite(rsi[prev_i]):
                     if close[pivot] < close[prev_i] and rsi[pivot] > rsi[prev_i]:
-                        out[confirm]["direction"] = 1\n                        out[confirm]["strength"] = min(1.0, abs(close[pivot] / close[prev_i] - 1.0))
+                        out[confirm]["direction"] = 1
+                        out[confirm]["strength"] = min(1.0, abs(close[pivot] / close[prev_i] - 1.0))
             last_low = pivot
         if close[pivot] == max(window):
             if last_high is not None:
                 prev_i = last_high
                 if pivot - prev_i <= max_gap and _finite(rsi[pivot]) and _finite(rsi[prev_i]):
                     if close[pivot] > close[prev_i] and rsi[pivot] < rsi[prev_i]:
-                        out[confirm]["direction"] = -1\n                        out[confirm]["strength"] = min(1.0, abs(close[pivot] / close[prev_i] - 1.0))
+                        out[confirm]["direction"] = -1
+                        out[confirm]["strength"] = min(1.0, abs(close[pivot] / close[prev_i] - 1.0))
             last_high = pivot
     return out
 
