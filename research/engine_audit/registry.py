@@ -1,13 +1,23 @@
 """Promotion registry for source-audited mechanism ports."""
 from engines import funding_rate_mean_reversion, taker_buy_pressure_momentum
 from price_action_engines import rsi_pivot_divergence, volume_range_exhaustion
+from specialist_signal_engines import round_number_bounce, wall_pull_detector, book_imbalance_zscore, correlation_break_recovery
 
 DIRECTIONAL_ENGINES = {
     "funding_rate_mean_reversion": funding_rate_mean_reversion,
     "taker_buy_pressure_momentum": taker_buy_pressure_momentum,
     "rsi_pivot_divergence": rsi_pivot_divergence,
     "volume_range_exhaustion": volume_range_exhaustion,
+    "round_number_bounce": round_number_bounce,
 }
+SPECIALIST_SIGNAL_ENGINES = {
+    "wall_pull_detector": wall_pull_detector,
+    "book_imbalance_zscore": book_imbalance_zscore,
+}
+PAIRWISE_SPECIALIST_ENGINES = {
+    "correlation_break_recovery": correlation_break_recovery,
+}
+
 SPECIALIZED_NOT_CANDLE_BACKTESTABLE = (
     "spot_perp_funding_carry",
     "avellaneda_stoikov_market_making",
