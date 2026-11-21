@@ -38,6 +38,11 @@ def load_rows(path: Path):
         if r.get(ts_field,"") in ("",None):
             raise ValueError(f"missing timestamp/open_time at CSV line {n}")
         item={"timestamp":int(float(r[ts_field]))}
+        close_field="close_timestamp" if r.get("close_timestamp","") not in ("",None) else "close_time"
+        if r.get(close_field,"") not in ("",None):
+            item["close_timestamp"]=int(float(r[close_field]))
+            if item["close_timestamp"]<item["timestamp"]:
+                raise ValueError(f"close time precedes open time at CSV line {n}")
         for k in ("open","high","low","close"):
             item[k]=float(r[k])
         for k in ("funding_rate","buy_ratio","open_interest","taker_ls_vol_ratio",
@@ -80,7 +85,8 @@ def main():
     trades=run_directional_signals(rows,ENGINES[a.engine],stop_fraction=a.stop_fraction,
         target_r=a.target_r,fee_bps_per_side=a.fee_bps,slippage_bps_per_side=a.slippage_bps)
     a.output.parent.mkdir(parents=True,exist_ok=True)
-    fields=["signal_timestamp","entry_timestamp","exit_timestamp","direction","entry","exit",
+    fields=["signal_timestamp","entry_timestamp","exit_timestamp","exit_bar_open_timestamp",
+            "exit_bar_close_timestamp","exit_time_precision","direction","entry","exit",
             "exit_reason","gross_bps","net_bps","exit_model"]
     with a.output.open("w",newline="") as f:
         w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(trades)
