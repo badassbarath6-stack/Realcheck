@@ -63,6 +63,27 @@ def strategy_spec(name):
     raise ValueError(f"unknown strategy: {name}")
 
 
+def validate_and_trim_data(rows, strategy, max_funding_age_hours=24.0, max_metric_age_minutes=15.0):
+    """Reject stale derivative feeds; trim only leading rows before first metrics."""
+    if strategy=="funding_mr":
+        ages=[r["funding_age_ms"] for r in rows if "funding_age_ms" in r]
+        if not ages:
+            raise ValueError("funding_mr needs funding_age_ms from the causal funding join")
+        if any(age>max_funding_age_hours*3600000 for age in ages):
+            raise ValueError("funding history contains stale observations beyond the configured age limit")
+    if strategy=="oi_divergence":
+        ages=[(r.get("open_interest_age_ms"),r.get("taker_ls_age_ms")) for r in rows]
+        first=next((i for i,(oi_age,ls_age) in enumerate(ages) if oi_age is not None and ls_age is not None),None)
+        if first is None:
+            raise ValueError("oi_divergence needs timestamped OI and taker-ratio age columns")
+        rows=rows[first:]
+        max_age=max_metric_age_minutes*60000
+        if any(r.get("open_interest_age_ms") is None or r.get("taker_ls_age_ms") is None or
+               r["open_interest_age_ms"]>max_age or r["taker_ls_age_ms"]>max_age for r in rows):
+            raise ValueError("OI/taker-ratio metrics are stale or missing inside the requested backtest period")
+    return rows
+
+
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--strategy",choices=("funding_mr","taker_momentum","oi_divergence"),required=True)
@@ -88,22 +109,7 @@ def main():
     missing=[k for k in required if not any(k in r for r in rows)]
     if missing:
         raise ValueError(f"{a.strategy} requires point-in-time columns: {missing}")
-    if a.strategy=="funding_mr":
-        ages=[r["funding_age_ms"] for r in rows if "funding_age_ms" in r]
-        if not ages:
-            raise ValueError("funding_mr needs funding_age_ms from the causal funding join")
-        if any(age>a.max_funding_age_hours*3600000 for age in ages):
-            raise ValueError("funding history contains stale observations beyond the configured age limit")
-    if a.strategy=="oi_divergence":
-        ages=[(r.get("open_interest_age_ms"),r.get("taker_ls_age_ms")) for r in rows]
-        first=next((i for i,(oi_age,ls_age) in enumerate(ages) if oi_age is not None and ls_age is not None),None)
-        if first is None:
-            raise ValueError("oi_divergence needs timestamped OI and taker-ratio age columns")
-        rows=rows[first:]
-        max_age=a.max_metric_age_minutes*60000
-        if any(r.get("open_interest_age_ms") is None or r.get("taker_ls_age_ms") is None or
-               r["open_interest_age_ms"]>max_age or r["taker_ls_age_ms"]>max_age for r in rows):
-            raise ValueError("OI/taker-ratio metrics are stale or missing inside the requested backtest period")
+    rows=validate_and_trim_data(rows,a.strategy,a.max_funding_age_hours,a.max_metric_age_minutes)
     if a.strategy=="taker_momentum" and any("volume" not in r for r in rows):
         raise ValueError("taker_momentum requires total base volume")
     result=walk_forward(rows,signal_fn,grid,timeframe=timeframe,
