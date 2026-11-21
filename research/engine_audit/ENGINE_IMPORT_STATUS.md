@@ -149,3 +149,8 @@ See [AUDIT_BATCH_11.md](AUDIT_BATCH_11.md). Batch 11 adds volatility-scaled cros
 ## Source audit — Batch 12
 
 See [AUDIT_BATCH_12.md](AUDIT_BATCH_12.md). Batch 12 adds four distinct profile/grid mechanisms: adaptive arithmetic/geometric range grid; POC proximity reversion; value-area re-entry fade; and low-volume-node traversal breakout. All four passed source/mechanism review but remain unpromoted pending exact event/fill state, rolling profile timing, and realistic OHLCV/L2 profile limitations. The source is Apache-2.0; no code was copied. DCA accumulation was inspected but not counted as independent alpha; order-flow, SMC, Elliott-wave, indicator-momentum and arbitrage bundles were rejected or deduplicated. Cumulative accepted/conditional source-review count: 42 of 100; 58 remain. No historical Realcheck backtest has started.
+
+
+## Source audit — Batch 13
+
+See [AUDIT_BATCH_13.md](AUDIT_BATCH_13.md). Batch 13 adds two conditional mechanisms: lagged seven-day DeFiLlama stablecoin-supply growth as a macro liquidity regime filter, and lagged seven-day Dune ERC-20 exchange netflow ranked cross-sectionally as a long/short futures factor. Both require point-in-time source timestamps and additional OOS verification; the ETF-flow input was a synthetic fixture, the macro DXY filter failed its own cost-adjusted risk test, and the liquidation proxy was deduplicated with the OI-confirmed crash family. No code copied. Cumulative accepted/conditional source-review count: 44 of 100; 56 remain. No historical Realcheck backtest has started.
