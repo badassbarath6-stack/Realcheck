@@ -97,24 +97,36 @@ def oi_price_quadrants(rows: Iterable[Mapping[str, Any]], *,
         oi_threshold: float=0.01, use_mr: bool=True) -> list[dict[str, Any]]:
     """Conditional OI/price quadrant hypotheses; no claim about which side closes."""
     data=list(rows); out=[]
+    oi_values=[]; ls_values=[]
+    last_oi=None; last_ls=1.0
+    for row in data:
+        if _finite(row.get("open_interest")):
+            last_oi=float(row["open_interest"])
+        if _finite(row.get("taker_ls_vol_ratio")):
+            last_ls=float(row["taker_ls_vol_ratio"])
+        oi_values.append(last_oi)
+        ls_values.append(last_ls)
     for i,row in enumerate(data):
         direction,regime=0,"unknown"
-        if i>=lookback_bars+1:
-            # Upstream uses pct_change(lookback).shift(1): both endpoints
-            # must be no later than the prior completed bar, not the signal bar.
-            start=data[i-lookback_bars-1]
-            end=data[i-1]
-            p0,p1=float(start["close"]),float(end["close"])
-            o0,o1=float(start["open_interest"]),float(end["open_interest"])
-            pc=p1/p0-1 if p0 else 0.; oc=o1/o0-1 if o0 else 0.
-            ls=float(data[i-1].get("taker_ls_vol_ratio",1.0))
-            pu,pd=pc>price_threshold,pc < -price_threshold
-            ou,od=oc>oi_threshold,oc < -oi_threshold
-            if pu and ou and ls>1: direction,regime=1,"price_up_oi_up_continuation"
-            elif pd and ou and ls<1: direction,regime=-1,"price_down_oi_up_continuation"
-            elif use_mr and pd and od: direction,regime=1,"price_down_oi_down_reversal_hypothesis"
-            elif use_mr and pu and od: direction,regime=-1,"price_up_oi_down_reversal_hypothesis"
-            else: regime="neutral_or_unconfirmed"
+        # Match source warm-up: signals.iloc[:lookback+2] = 0.
+        if i>=lookback_bars+2:
+            # pct_change(lookback).shift(1): endpoints i-1 and i-1-lookback.
+            start_i=i-lookback_bars-1
+            end_i=i-1
+            p0,p1=float(data[start_i]["close"]),float(data[end_i]["close"])
+            o0,o1=oi_values[start_i],oi_values[end_i]
+            if o0 is not None and o1 is not None and p0>0 and o0>0:
+                pc=p1/p0-1; oc=o1/o0-1
+                ls=ls_values[end_i]
+                pu,pd=pc>price_threshold,pc < -price_threshold
+                ou,od=oc>oi_threshold,oc < -oi_threshold
+                if pu and ou and ls>1: direction,regime=1,"price_up_oi_up_continuation"
+                elif pd and ou and ls<1: direction,regime=-1,"price_down_oi_up_continuation"
+                elif use_mr and pd and od: direction,regime=1,"price_down_oi_down_reversal_hypothesis"
+                elif use_mr and pu and od: direction,regime=-1,"price_up_oi_down_reversal_hypothesis"
+                else: regime="neutral_or_unconfirmed"
+            else:
+                regime="missing_oi_history"
         out.append({"timestamp":row.get("timestamp"),"direction":direction,"regime":regime,
                     "mechanism":"oi_price_quadrants",
                     "interpretation":"hypothesis_not_observed_trader_intent"})
