@@ -56,3 +56,6 @@ The cumulative accepted/conditional source-review count is 31 of 100; 69 remain.
 
 
 Batch 07 adds two conditional mechanisms. The cumulative accepted/conditional source-review count is 33 of 100; 67 remain. See [AUDIT_BATCH_07.md](AUDIT_BATCH_07.md). No historical backtest has started.
+
+
+Batch 08 adds one conditional ETF-flow/stablecoin-supply liquidity-regime candidate. The cumulative accepted/conditional source-review count is 34 of 100; 66 remain. See [AUDIT_BATCH_08.md](AUDIT_BATCH_08.md). No historical backtest has started.
