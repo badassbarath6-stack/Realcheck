@@ -7,7 +7,7 @@ class SpecialistSignalEngineTests(unittest.TestCase):
     def test_round_number_support_bounce(self):
         rows=[
             {"timestamp":1,"close":100.0,"low":99.0,"high":101.0},
-            {"timestamp":2,"close":100.0,"low":94.0,"high":101.0},
+            {"timestamp":2,"close":101.5,"low":99.5,"high":102.0},
         ]
         sig=round_number_bounce(rows,{"level_step_frac":0.1,"touch_threshold":0.01})
         self.assertEqual(sig[-1]["direction"],1)
