@@ -61,8 +61,7 @@ def funding_rate_mean_reversion(rows: Iterable[Mapping[str, Any]], *,
                     "mechanism":"funding_rate_mean_reversion"})
         if _finite(row.get("funding_rate")):
             prior_funding = float(row["funding_rate"])
-        if _finite(row.get("buy_ratio")):
-            prior_buy = float(row["buy_ratio"])
+        prior_buy = float(row["buy_ratio"]) if _finite(row.get("buy_ratio")) else 0.5
     return out
 
 
@@ -73,7 +72,7 @@ def taker_buy_pressure_momentum(rows: Iterable[Mapping[str, Any]], *,
     data = list(rows)
     if ma_period < 1 or confirm_bars < 1 or not 0.5 < threshold_high < 1 or atr_period < 2:
         raise ValueError("invalid taker-pressure parameters")
-    ratios = [float(r.get("buy_ratio",0.5)) for r in data]
+    ratios = [float(r["buy_ratio"]) if _finite(r.get("buy_ratio")) else 0.5 for r in data]
     atr = _atr_ewm(data,atr_period)
     atr_ma = []
     for i in range(len(data)):
