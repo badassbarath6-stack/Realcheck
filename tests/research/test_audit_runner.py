@@ -16,6 +16,7 @@ class AuditRunnerTests(unittest.TestCase):
             "taker_buy_pressure_momentum",
             "rsi_pivot_divergence",
             "volume_range_exhaustion",
+            "round_number_bounce",
         })
 
     def test_csv_loader_derives_taker_ratio_from_binance_base_volume(self):
