@@ -94,6 +94,14 @@ def run(symbol,tf,data_dir,out_dir):
  if gaps:raise RuntimeError(f"M1 continuity failure: {len(gaps)} gaps; first={gaps[:3]}")
  tfm=TFS[tf];tfms=tfm*60000;bs=bars(m1,tfm);atr=atrs(bs)
  idx={b[0]:i for i,b in enumerate(bs)}
+ # Precompute each forming TF candle's open and running extremes once. This avoids
+ # repeatedly rescanning up to 240 M1 rows for every threshold.
+ forming=[]; bucket=None; tf_open=run_hi=run_lo=None
+ for t,o,h,l,c in m1:
+  b=t//tfms*tfms
+  if b!=bucket: bucket=b;tf_open=o;run_hi=h;run_lo=l
+  else: run_hi=max(run_hi,h);run_lo=min(run_lo,l)
+  forming.append((bucket,tf_open,run_hi,run_lo))
  split1=START+int((END-START)*.6);split2=START+int((END-START)*.8)
  outputs=[]
  for threshold in THRESHOLDS:
@@ -101,17 +109,11 @@ def run(symbol,tf,data_dir,out_dir):
   for i,x in enumerate(m1):
    t,o,h,l,c=x
    if t<START or t>=END or i<=active_until:continue
-   bucket=t//tfms*tfms;pi=idx.get(bucket-tfms)
+   bucket,tf_open,run_hi,run_lo=forming[i];pi=idx.get(bucket-tfms)
    if pi is None or not math.isfinite(atr[pi]) or atr[pi]<=0:continue
-   # Forming TF impulse is measured from its opening price through this completed M1 candle.
-   first=t//tfms*tfms
-   # Locate first M1 candle in this TF bucket; archive is sorted and contiguous.
-   j=i
-   while j>0 and m1[j-1][0]//tfms*tfms==bucket:j-=1
-   tf_open=m1[j][1]
+   # Impulse is the forming TF close-to-open displacement at this completed M1 close.
    direction=1 if c>tf_open else (-1 if c<tf_open else 0)
    if not direction or abs(c-tf_open)<threshold*atr[pi]:continue
-   run_hi=max(z[2] for z in m1[j:i+1]);run_lo=min(z[3] for z in m1[j:i+1])
    entry_i=i+1
    if entry_i>=len(m1):continue
    entry=m1[entry_i][1]
