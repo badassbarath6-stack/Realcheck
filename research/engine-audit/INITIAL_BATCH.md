@@ -1,0 +1,24 @@
+# Initial 100-Mechanism Audit
+
+Branch: `research/100-mechanism-audit-import` (based on `research/mtf-top100-two-year`).
+
+This is a source audit, not a profitability claim. No new backtests have started.
+
+| Mechanism | Source | Audit | Platform blocker |
+|---|---|---|---|
+| Funding-rate mean-reversion fade | [signals.py](https://github.com/Gotodataru/binance-futures-backtest/blob/main/strategy_1_funding_mr/signals.py) | PASS mechanism | Needs funding + taker-buy ratio. Current loader drops volume/taker-buy fields. Upstream root has no visible LICENSE; independently reimplement, do not verbatim-copy. |
+| Taker-buy-pressure momentum | [signals.py](https://github.com/Gotodataru/binance-futures-backtest/blob/main/strategy_2_taker_momentum/signals.py) | PASS mechanism | Needs taker-buy volume/total volume, not currently retained. |
+| OI/price quadrants | [signals.py](https://github.com/Gotodataru/binance-futures-backtest/blob/main/strategy_3_oi_divergence/signals.py) | CONDITIONAL | OI + taker long/short ratio absent. OI falling cannot identify which side is closing; reversal labels are hypotheses, not facts. |
+| Avellaneda–Stoikov funding-aware market making | [source](https://github.com/ib2003dev/market-making-sim/blob/main/src/market_making_sim/strategies/avellaneda_stoikov.py) | PASS mechanism | Needs timestamped order-book depth, trades/fills, funding and event-driven queue simulation. Source repo uses WTFPL. |
+| Naive constant-spread maker | [source](https://github.com/ib2003dev/market-making-sim/blob/main/src/market_making_sim/strategies/naive.py) | REJECT as duplicate | Baseline/control for market making, not an independent alpha mechanism. |
+| Funding-adjusted cross-venue OU spread | [signal source](https://github.com/yoho369/crypto-perpetual-arbitrage/blob/main/src/statistical_eng.py), [execution source](https://github.com/yoho369/crypto-perpetual-arbitrage/blob/main/src/backtest_eng.py) | CONDITIONAL / current code fails | Requires synchronized multi-venue BBO and funding. `liquidity_toll.rolling(...).median().bfill()` leaks future values; full-sample ADF cannot be used for live selection. Must fix before import. |
+| Spot/perp delta-neutral funding carry | [source](https://github.com/idreesm18/crypto-perp-funding-carry/blob/main/src/2_signal.py) | PASS mechanism | Needs spot + perp prices and funding; current Realcheck input is perp OHLC only. Position sizing uses 30-day realized volatility. |
+| Dated-futures cash-and-carry basis with TWAP hedge | [scanner](https://github.com/tkwsean/SpotFuturesArbitrage/blob/main/scanner.py), [replay](https://github.com/tkwsean/SpotFuturesArbitrage/blob/main/backtest_replay.py) | PASS mechanism; replay fidelity limited | Distinct delivery-basis convergence mechanism. Replay uses daily bars, synthetic spread and always-fill simulation; not sufficient evidence of executable profitability. Requires spot + dated COIN-M futures, expiry and inverse-contract accounting. |
+| Funding z-score fade / fixed funding threshold | [z-score](https://github.com/xy3293/crypto-strategy-backtest/blob/main/backtest/strategies/funding_zscore_fade.py), [threshold](https://github.com/xy3293/crypto-strategy-backtest/blob/main/backtest/strategies/funding_extreme_threshold.py) | REJECT as two separate engines | Both are variants of the same funding-extreme contrarian mechanism; count once, not twice. |
+| Compression-conditioned swing breakout | [source](https://github.com/xy3293/crypto-strategy-backtest/blob/main/backtest/strategies/jlaw_swing_breakout_4h.py) | CONDITIONAL distinct candidate | 30-bar range compression followed by a trend-aligned range break. Must compare against existing Donchian/Turtle breakout family before counting separately. |
+
+## Realcheck compatibility
+
+The current `research/impulse_retracer_backtest.py` is a dedicated impulse/retracement runner, not a generic strategy-plugin runner. Its Binance kline parser currently retains only OHLC; funding is loaded separately, but taker volume, OI, long/short ratios, order-book depth, trade queue and multi-venue BBO are not part of its input contract. Bar-signal engines need a causal signal interface and next-M1-open fills; maker and cross-venue strategies need separate event-driven execution adapters. Do not force these through the impulse-retracement logic.
+
+This batch has 8 distinct mechanism candidates that passed or conditionally passed at the concept/source level, 1 duplicate rejected, and 1 compression-breakout candidate pending deduplication. Zero are yet platform-ready, and zero new backtests have started. The 100-mechanism audit remains in progress.
