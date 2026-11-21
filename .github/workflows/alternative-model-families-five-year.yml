@@ -61,14 +61,14 @@ jobs:
       - name: Run five-year model-family comparison
         run: |
           python research/model_family_backtest.py \
-            --symbol "\${{ matrix.symbol }}" \
-            --timeframe "\${{ matrix.timeframe }}" \
+            --symbol "${{ matrix.symbol }}" \
+            --timeframe "${{ matrix.timeframe }}" \
             --data-dir /tmp/binance \
             --output-dir model-family-output
       - name: Verify complete outputs
         env:
-          SYMBOL: \${{ matrix.symbol }}
-          TF: \${{ matrix.timeframe }}
+          SYMBOL: ${{ matrix.symbol }}
+          TF: ${{ matrix.timeframe }}
         run: |
           python - <<'PY'
           import csv, json, os
@@ -86,7 +86,7 @@ jobs:
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: alternative-models-\${{ matrix.symbol }}-\${{ matrix.timeframe }}
+          name: alternative-models-${{ matrix.symbol }}-${{ matrix.timeframe }}
           path: model-family-output/
           if-no-files-found: error
           retention-days: 90
