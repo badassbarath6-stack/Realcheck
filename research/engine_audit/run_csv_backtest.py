@@ -32,7 +32,7 @@ def load_rows(path: Path):
         item={"timestamp":int(float(r["timestamp"]))}
         for k in ("open","high","low","close"):
             item[k]=float(r[k])
-        for k in ("funding_rate","buy_ratio","open_interest","taker_ls_vol_ratio","realized_vol_30d"):
+        for k in ("funding_rate","buy_ratio","open_interest","taker_ls_vol_ratio","realized_vol_30d","volume"):
             if r.get(k,"") not in ("",None): item[k]=float(r[k])
         if min(item["open"],item["high"],item["low"],item["close"])<=0:
             raise ValueError(f"non-positive OHLC at CSV line {n}")
