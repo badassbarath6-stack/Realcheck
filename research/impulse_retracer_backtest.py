@@ -249,10 +249,27 @@ def config_key(c):
     return tuple(asdict(c)[k] for k in ("atr_period","impulse_atr","retracement","sl_buffer","rr"))
 
 def write_csv(path,rows,fieldnames=None):
-    if not rows and not fieldnames: path.write_text(""); return
-    keys=fieldnames or list(rows[0])
+    """Write heterogeneous metric rows without dropping later-added metric columns.
+
+    Keep caller-specified columns first, then append every additional key in
+    first-seen order. This prevents DictWriter from crashing when metric
+    dictionaries gain fields (for example average win/loss bps) in later rows.
+    """
+    if not rows and not fieldnames:
+        path.write_text("")
+        return
+    keys=[]
+    seen=set()
+    for key in (fieldnames or []):
+        if key not in seen:
+            keys.append(key); seen.add(key)
+    for row in rows:
+        for key in row:
+            if key not in seen:
+                keys.append(key); seen.add(key)
     with path.open("w",newline="") as f:
-        w=csv.DictWriter(f,fieldnames=keys); w.writeheader()
+        w=csv.DictWriter(f,fieldnames=keys,extrasaction="raise")
+        w.writeheader()
         for r in rows:
             x={k:(json.dumps(asdict(v)) if isinstance(v,Config) else v) for k,v in r.items()}
             w.writerow(x)
