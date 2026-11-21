@@ -6,8 +6,8 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-START_MS=int(datetime(2023,11,21,tzinfo=timezone.utc).timestamp()*1000)
-END_MS=int(datetime(2026,11,21,tzinfo=timezone.utc).timestamp()*1000)
+START_MS=int(datetime(2023,11,1,tzinfo=timezone.utc).timestamp()*1000)
+END_MS=int(datetime(2026,11,1,tzinfo=timezone.utc).timestamp()*1000)
 BASE="https://data.binance.vision/data/futures/um"
 TIMEFRAMES={"5m":5,"15m":15,"30m":30,"1h":60,"2h":120,"4h":240}
 ATR_PERIODS=(14,); THRESHOLDS=(2.4,)
@@ -29,7 +29,7 @@ def sha256(path):
 
 def month_files(symbol):
     out=[]
-    y,m=2023,10
+    y,m=2023,9
     while (y,m)<=(2026,10):
         out.append((y,m)); m+=1
         if m==13: y+=1; m=1
@@ -88,15 +88,12 @@ def fetch_daily_rest_archive(symbol, day, target):
     return target
 
 def download_inputs(symbol,data_dir):
+    # Complete monthly archives only: Nov-2023 through Oct-2026 is exactly
+    # three full calendar years and avoids incomplete current-month endpoints.
     paths=[]
     for y,m in month_files(symbol):
         name=f"{symbol}-1m-{y}-{m:02d}.zip"
         paths.append(fetch_archive(f"{BASE}/monthly/klines/{symbol}/1m/{name}",Path(data_dir)/name))
-    # Binance Vision daily archives can lag or return 404 for recent dates.
-    # Use the official Futures REST endpoint for the completed partial-month days.
-    for day in range(1,21):
-        name=f"{symbol}-1m-2026-11-{day:02d}.zip"
-        paths.append(fetch_daily_rest_archive(symbol,day,Path(data_dir)/name))
     return paths
 
 def load_klines(paths):
@@ -330,7 +327,7 @@ def run_pair(symbol,tf,data_dir,out_dir):
     # Exact M1 continuity is audited, not silently forward-filled.
     start=START_MS-35*86400000
     m1=[r for r in m1_all if start<=r[0]<END_MS]
-    if not m1 or m1[-1][0]<END_MS-60000: raise RuntimeError("Input archive does not cover through 2026-11-20 23:59 UTC")
+    if not m1 or m1[-1][0]<END_MS-60000: raise RuntimeError("Input archive does not cover through 2026-10-31 23:59 UTC")
     if m1[0][0]>start: raise RuntimeError("M1 warmup coverage starts late; ATR warmup cannot be trusted")
     gaps=[(a[0],b[0]) for a,b in zip(m1,m1[1:]) if b[0]-a[0]!=60000]
     if gaps: raise RuntimeError(f"M1 continuity check failed: {len(gaps)} missing-minute gaps; first={gaps[:5]}")
@@ -373,7 +370,7 @@ def run_pair(symbol,tf,data_dir,out_dir):
                       "retracement":x["config"].retracement,"sl_buffer":x["config"].sl_buffer,"rr":x["config"].rr})
             trade_rows.append(y)
     write_csv(out/f"{symbol}_{tf}_selected_trades.csv",trade_rows,["entry_ms","exit_ms","entry","exit","reason","gross_bps","net_bps","holding_minutes","funding_bps","event_id","trigger_ms","impulse_ms","direction","period","atr_period","impulse_atr","retracement","sl_buffer","rr"])
-    manifest={"symbol":symbol,"timeframe":tf,"start_utc":"2023-11-21T00:00:00Z","end_utc_exclusive":"2026-11-21T00:00:00Z",
+    manifest={"symbol":symbol,"timeframe":tf,"start_utc":"2023-11-01T00:00:00Z","end_utc_exclusive":"2026-11-01T00:00:00Z",
               "configurations":len(configurations()),"minimum_validation_trades":50,"config_grid":{"atr_periods":ATR_PERIODS,"impulse_atr_multipliers":THRESHOLDS,
               "retracements":RETRACEMENTS,"sl_buffers_atr":BUFFERS,"reward_risk":RRS,
               "pending_expiry_complete_bars":3},"code_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
@@ -383,7 +380,7 @@ def run_pair(symbol,tf,data_dir,out_dir):
               "source_files":[{"name":p.name,"sha256":sha256(p)} for p in files],
               "funding_files":[{"name":p.name,"sha256":sha256(p)} for p in funding_files],"funding_missing_archives":funding_missing,
               "fees_bps_per_side":FEE_BPS,"slippage_scenarios_bps_per_side":[2.,7.],"split_boundaries_ms":split_bounds(),
-              "funding":"Binance Vision monthly fundingRate archives plus official Binance REST API for current partial month; unavailable archives are excluded and listed","funding_rate_rows":len(funding),"funding_first_timestamp":funding[0][0] if funding else None,"funding_last_timestamp":funding[-1][0] if funding else None,
+              "funding":"Binance Vision monthly fundingRate archives; unavailable archives are excluded and listed","funding_rate_rows":len(funding),"funding_first_timestamp":funding[0][0] if funding else None,"funding_last_timestamp":funding[-1][0] if funding else None,
               "method":"Each of 1,000 retracement fractions independently evaluates every detected impulse; prior completed timeframe ATR; M1 retracement trigger; next M1 open entry; stop-first; expiry after three subsequent complete TF bars; no cross-config signal suppression",
               "status":"BACKTEST_WITH_AVAILABLE_FUNDING"}
     (out/f"{symbol}_{tf}_manifest.json").write_text(json.dumps(manifest,indent=2))
