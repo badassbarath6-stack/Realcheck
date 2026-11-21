@@ -108,11 +108,11 @@ def simulate_grid(m1_t,m1_o,m1_h,m1_l,m1_c,events,sl_values,rr_values,split1,spl
    active_until=-1
    eq=np.zeros(3);peak=np.zeros(3);maxdd=np.zeros(3)
    for ei in range(len(events)):
-    signal_i=events[ei,0]
+    signal_i=int(events[ei,0])
     if signal_i<=active_until:continue
     entry_i=signal_i+1
     if entry_i>=len(m1_t):continue
-    direction=events[ei,1];atr=events[ei,2]
+    direction=int(events[ei,1]);atr=events[ei,2]
     entry=m1_o[entry_i];risk=slm*atr
     if risk<=0 or entry<=0:continue
     if direction==1:stop=entry-risk;target=entry+risk*rr
