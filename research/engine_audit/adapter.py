@@ -44,9 +44,16 @@ def run_directional_signals(bars: list[Mapping[str, Any]], signal_fn: Callable[.
             exit_i=len(bars)-1; exit_price=float(bars[exit_i]["close"]); reason="end_of_data"
         gross=direction*(exit_price-entry)/entry*10000
         costs=2*(fee_bps_per_side+slippage_bps_per_side)
-        trades.append({"signal_timestamp":bars[i].get("timestamp"),
+        exit_open_ts=bars[exit_i].get("timestamp")
+        exit_close_ts=bars[exit_i].get("close_timestamp")
+        exact_exit=(reason=="end_of_data" and exit_close_ts is not None)
+        trades.append({"signal_timestamp":bars[i].get("close_timestamp",bars[i].get("timestamp")),
             "entry_timestamp":bars[entry_i].get("timestamp"),
-            "exit_timestamp":bars[exit_i].get("timestamp"),"direction":direction,
+            "exit_timestamp":exit_close_ts if exact_exit else exit_open_ts,
+            "exit_bar_open_timestamp":exit_open_ts,
+            "exit_bar_close_timestamp":exit_close_ts,
+            "exit_time_precision":"bar_close" if exact_exit else "bar_interval",
+            "direction":direction,
             "entry":entry,"exit":exit_price,"exit_reason":reason,
             "gross_bps":gross,"net_bps":gross-costs,
             "exit_model":"adapter_fixed_fractional_stop_target"})
