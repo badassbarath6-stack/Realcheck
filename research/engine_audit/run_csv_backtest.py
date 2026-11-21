@@ -22,7 +22,7 @@ ENGINES={
     "rsi_pivot_divergence": rsi_pivot_divergence,
     "volume_range_exhaustion": volume_range_exhaustion,
 }
-REQUIRED=("timestamp","open","high","low","close")
+REQUIRED=("open","high","low","close")
 
 def load_rows(path: Path):
     with path.open(newline="") as f:
@@ -32,15 +32,26 @@ def load_rows(path: Path):
     if missing: raise ValueError(f"missing required columns: {missing}")
     parsed=[]
     for n,r in enumerate(rows,2):
-        ts_field="timestamp" if r.get("timestamp","") not in ("",None) else "open_time"\n        if r.get(ts_field,"") in ("",None): raise ValueError(f"missing timestamp/open_time at CSV line {n}")\n        item={"timestamp":int(float(r[ts_field]))}
+        ts_field="timestamp" if r.get("timestamp","") not in ("",None) else "open_time"
+        if r.get(ts_field,"") in ("",None):
+            raise ValueError(f"missing timestamp/open_time at CSV line {n}")
+        item={"timestamp":int(float(r[ts_field]))}
         for k in ("open","high","low","close"):
             item[k]=float(r[k])
         for k in ("funding_rate","buy_ratio","open_interest","taker_ls_vol_ratio",
-                  "realized_vol_30d","volume"):
-            if r.get(k,"") not in ("",None): item[k]=float(r[k])
+                  "realized_vol_30d","volume","taker_buy_base_volume",
+                  "taker_buy_base_asset_volume"):
+            if r.get(k,"") not in ("",None):
+                item[k]=float(r[k])
         if min(item["open"],item["high"],item["low"],item["close"])<=0:
             raise ValueError(f"non-positive OHLC at CSV line {n}")
-        if "buy_ratio" not in item:\n            taker=item.get("taker_buy_base_volume",item.get("taker_buy_base_asset_volume"))\n            if taker is not None and item.get("volume",0)>0:\n                item["buy_ratio"]=taker/item["volume"]\n        if "buy_ratio" in item and not 0.0<=item["buy_ratio"]<=1.0:\n            raise ValueError(f"buy_ratio must be in [0,1] at CSV line {n}")\n        if item["low"]>min(item["open"],item["close"]) or item["high"]<max(item["open"],item["close"]):
+        if "buy_ratio" not in item:
+            taker=item.get("taker_buy_base_volume",item.get("taker_buy_base_asset_volume"))
+            if taker is not None and item.get("volume",0)>0:
+                item["buy_ratio"]=taker/item["volume"]
+        if "buy_ratio" in item and not 0.0<=item["buy_ratio"]<=1.0:
+            raise ValueError(f"buy_ratio must be in [0,1] at CSV line {n}")
+        if item["low"]>min(item["open"],item["close"]) or item["high"]<max(item["open"],item["close"]):
             raise ValueError(f"invalid OHLC envelope at CSV line {n}")
         parsed.append(item)
     if any(b["timestamp"]<=a["timestamp"] for a,b in zip(parsed,parsed[1:])):
@@ -61,7 +72,7 @@ def main():
     if a.engine=="volume_range_exhaustion" and any("volume" not in r for r in rows):
         raise ValueError("volume_range_exhaustion requires volume in every row")
     if a.engine=="taker_buy_pressure_momentum" and any("buy_ratio" not in r for r in rows):
-        raise ValueError("taker_buy_pressure_momentum requires buy_ratio in every row")
+        raise ValueError("taker_buy_pressure_momentum requires buy_ratio or taker-buy base volume in every row")
     if a.engine=="funding_rate_mean_reversion" and any("funding_rate" not in r for r in rows):
         raise ValueError("funding_rate_mean_reversion requires point-in-time funding_rate")
     trades=run_directional_signals(rows,ENGINES[a.engine],stop_fraction=a.stop_fraction,
