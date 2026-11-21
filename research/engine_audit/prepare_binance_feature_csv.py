@@ -63,20 +63,28 @@ def load_klines(paths: Iterable[Path]):
 
 def load_funding(paths: Iterable[Path]):
     rates={}
+    timestamp_names={"fundingtime","funding_time","calc_time","timestamp","time"}
+    rate_names={"fundingrate","funding_rate","last_funding_rate","rate"}
     for path in sorted(paths):
+        ts_idx=rate_idx=None
         for line,row in enumerate(_csv_rows(path),1):
-            if not row or len(row)<2:
+            if not row:
                 continue
-            # Ignore header lines; Binance Vision commonly stores
-            # calc_time, funding_interval_hours, last_funding_rate.
-            if not row[0].strip().lstrip("-").isdigit():
+            names=[x.strip().lower() for x in row]
+            if ts_idx is None:
+                ti=next((i for i,x in enumerate(names) if x in timestamp_names),None)
+                ri=next((i for i,x in enumerate(names) if x in rate_names),None)
+                if ti is not None and ri is not None:
+                    ts_idx,rate_idx=ti,ri
+                    continue
+            if ts_idx is None:
+                # Binance Vision without a header: calc_time, interval_hours,
+                # last_funding_rate. Some exports contain timestamp,fundingRate.
+                ts_idx,rate_idx=0,(2 if len(row)>=3 else 1)
+            if max(ts_idx,rate_idx)>=len(row) or not row[ts_idx].strip().lstrip("-").isdigit():
                 continue
             try:
-                ts=int(row[0])
-                if len(row)>=3:
-                    rate=float(row[2])
-                else:
-                    rate=float(row[1])
+                ts=int(row[ts_idx]); rate=float(row[rate_idx])
             except (ValueError,IndexError):
                 continue
             if not math.isfinite(rate):
