@@ -144,3 +144,8 @@ See [AUDIT_BATCH_10.md](AUDIT_BATCH_10.md). Batch 10 adds one conditional option
 ## Source audit — Batch 11
 
 See [AUDIT_BATCH_11.md](AUDIT_BATCH_11.md). Batch 11 adds volatility-scaled cross-sectional price momentum: rank a point-in-time multi-perpetual universe by lagged 14-day return divided by lagged 30-day volatility, then hold equal-weight top-30% longs and bottom-30% shorts as a dollar-neutral portfolio. This is distinct from time-series momentum and from the funding-ranked evaluator previously rejected as mislabeled. Source is MIT-licensed. The source's own OOS Sharpe claim is not accepted as our result; survivorship bias, missing funding/slippage and an unstable final OOS third remain material limitations. It needs a separate portfolio-level adapter, not the single-symbol candle runner. Cumulative accepted/conditional source-review count: 38 of 100; 62 remain. No historical Realcheck backtest has started.
+
+
+## Source audit — Batch 12
+
+See [AUDIT_BATCH_12.md](AUDIT_BATCH_12.md). Batch 12 adds four distinct profile/grid mechanisms: adaptive arithmetic/geometric range grid; POC proximity reversion; value-area re-entry fade; and low-volume-node traversal breakout. All four passed source/mechanism review but remain unpromoted pending exact event/fill state, rolling profile timing, and realistic OHLCV/L2 profile limitations. The source is Apache-2.0; no code was copied. DCA accumulation was inspected but not counted as independent alpha; order-flow, SMC, Elliott-wave, indicator-momentum and arbitrage bundles were rejected or deduplicated. Cumulative accepted/conditional source-review count: 42 of 100; 58 remain. No historical Realcheck backtest has started.
