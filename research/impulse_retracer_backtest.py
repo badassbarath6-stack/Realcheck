@@ -6,13 +6,15 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-START_MS=int(datetime(2024,11,20,tzinfo=timezone.utc).timestamp()*1000)
+START_MS=int(datetime(2021,11,20,tzinfo=timezone.utc).timestamp()*1000)
 END_MS=int(datetime(2026,11,20,tzinfo=timezone.utc).timestamp()*1000)
 BASE="https://data.binance.vision/data/futures/um"
 TIMEFRAMES={"5m":5,"15m":15,"30m":30,"1h":60,"2h":120,"4h":240}
-ATR_PERIODS=(10,14,20,28); THRESHOLDS=(2.,2.2,2.4,2.6,2.8,3.)
-RETRACEMENTS=(.618,.667,.707,.75,.786,.82); BUFFERS=(0.,.2,.4,.6,.8,1.)
-RRS=(1.2,1.5,2.,2.5,3.,4.); FEE_BPS=5.
+ATR_PERIODS=(14,); THRESHOLDS=(2.4,)
+RETRACEMENTS=tuple(x/100 for x in range(0,100,5))
+BUFFERS=(1.,1.5,2.,2.5,3.)
+RRS=(2.,2.2,2.4,2.6,2.8,3.,3.5,4.,4.5,5.,5.5,6.)
+FEE_BPS=5.
 
 @dataclass(frozen=True)
 class Config:
@@ -29,7 +31,7 @@ def sha256(path):
 
 def month_files(symbol):
     out=[]
-    y,m=2024,10
+    y,m=2021,10
     while (y,m)<=(2026,10):
         out.append((y,m)); m+=1
         if m==13: y+=1; m=1
@@ -221,28 +223,20 @@ def split_bounds():
     return START_MS+int(span*.60), START_MS+int(span*.80)
 
 def select_period(candidates,period,training_pf=None):
+    """Keep each configuration independent; deduplicate only within that config/event."""
     train_end,val_end=split_bounds()
     lo,hi=(START_MS,train_end) if period=="train" else ((train_end,val_end) if period=="validation" else (val_end,END_MS))
     rows=[x for x in candidates if lo<=x["impulse_ms"]<hi]
-    if period=="train": return [x for x in rows if x["exit_ms"]<hi]
-    # First determine the earliest trigger across every config for the impulse.
-    # A boundary-crossing trade still owns the impulse; it is not replaced by a later contender.
     grouped={}
-    for x in rows: grouped.setdefault(x["event_id"],[]).append(x)
+    for x in rows:
+        grouped.setdefault((x["event_id"],config_key(x["config"])),[]).append(x)
     selected=[]
     for group in grouped.values():
         earliest=min(x["trigger_ms"] for x in group)
-        contenders=[x for x in group if x["trigger_ms"]==earliest]
-        if len(contenders)==1:
-            winner=contenders[0]
-        else:
-            eligible=[]
-            for x in contenders:
-                m=(training_pf or {}).get(config_key(x["config"]),{"pf":0.,"trades":0})
-                if m["trades"]>=30: eligible.append((m["pf"],m["trades"],x))
-            if not eligible: continue
-            winner=max(eligible,key=lambda z:(z[0],z[1]))[2]
-        if winner["exit_ms"]<hi: selected.append(winner)
+        winner=min((x for x in group if x["trigger_ms"]==earliest),key=lambda x:x["entry_ms"])
+        # Do not let trades crossing a chronological split contaminate the next split.
+        if winner["exit_ms"]<hi:
+            selected.append(winner)
     return selected
 
 def config_key(c):
@@ -361,10 +355,10 @@ def run_pair(symbol,tf,data_dir,out_dir):
                       "retracement":x["config"].retracement,"sl_buffer":x["config"].sl_buffer,"rr":x["config"].rr})
             trade_rows.append(y)
     write_csv(out/f"{symbol}_{tf}_selected_trades.csv",trade_rows,["entry_ms","exit_ms","entry","exit","reason","gross_bps","net_bps","holding_minutes","funding_bps","event_id","trigger_ms","impulse_ms","direction","period","atr_period","impulse_atr","retracement","sl_buffer","rr"])
-    manifest={"symbol":symbol,"timeframe":tf,"start_utc":"2024-11-20T00:00:00Z","end_utc_exclusive":"2026-11-20T00:00:00Z",
+    manifest={"symbol":symbol,"timeframe":tf,"start_utc":"2021-11-20T00:00:00Z","end_utc_exclusive":"2026-11-20T00:00:00Z",
               "configurations":len(configurations()),"config_grid":{"atr_periods":ATR_PERIODS,"impulse_atr_multipliers":THRESHOLDS,
               "retracements":RETRACEMENTS,"sl_buffers_atr":BUFFERS,"reward_risk":RRS,
-              "pending_expiry_complete_bars":3},"code_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
+              "pending_expiry_complete_bars":3,"configuration_count_expected":1200,"selection":"independent_per_configuration; no cross-configuration winner selection"},"code_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
               "m1_rows":len(m1),"m1_gap_count":len(gaps),
               "first_gaps":gaps[:100],"timeframe_bars":len(tf_bars),"candidate_trades":len(candidates),
               "selected_trades":{"train":len(train),"validation":len(validation),"oos":len(oos)},
