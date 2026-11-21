@@ -6,7 +6,7 @@ on:
     paths:
       - "research/retracement_1000_three_year_backtest.py"
       - "research/aggregate_retracement_1000.py"
-      - ".github/workflows/retracement-1000-three-year.yml"
+      - ".github/workflows/retracement-100-three-year.yml"
   workflow_dispatch:
 concurrency:
   group: retracement-1000-three-year
@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: research/mtf-top100-two-year
+          ref: research/retracement-100-three-year
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -53,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: research/mtf-top100-two-year
+          ref: research/retracement-100-three-year
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -89,7 +89,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: research/mtf-top100-two-year
+          ref: research/retracement-100-three-year
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
