@@ -100,9 +100,12 @@ def oi_price_quadrants(rows: Iterable[Mapping[str, Any]], *,
     for i,row in enumerate(data):
         direction,regime=0,"unknown"
         if i>=lookback_bars+1:
-            prev=data[i-lookback_bars-1]
-            p0,p1=float(prev["close"]),float(row["close"])
-            o0,o1=float(prev["open_interest"]),float(row["open_interest"])
+            # Upstream uses pct_change(lookback).shift(1): both endpoints
+            # must be no later than the prior completed bar, not the signal bar.
+            start=data[i-lookback_bars-1]
+            end=data[i-1]
+            p0,p1=float(start["close"]),float(end["close"])
+            o0,o1=float(start["open_interest"]),float(end["open_interest"])
             pc=p1/p0-1 if p0 else 0.; oc=o1/o0-1 if o0 else 0.
             ls=float(data[i-1].get("taker_ls_vol_ratio",1.0))
             pu,pd=pc>price_threshold,pc < -price_threshold

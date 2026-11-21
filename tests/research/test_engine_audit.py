@@ -33,9 +33,13 @@ class AuditedEngineTests(unittest.TestCase):
         for r in d: r["buy_ratio"]=0.30
         self.assertEqual(E.taker_buy_pressure_momentum(d,ma_period=10,confirm_bars=3,atr_period=10)[-1]["direction"],-1)
     def test_oi_reversal_is_labelled_hypothesis(self):
-        d=bars(20); d[-14]["close"]=100.; d[-14]["open_interest"]=1000.; d[-1]["close"]=99.; d[-1]["open_interest"]=900.
+        d=bars(20); d[-14]["close"]=100.; d[-14]["open_interest"]=1000.; d[-2]["close"]=99.; d[-2]["open_interest"]=900.
         s=E.oi_price_quadrants(d,lookback_bars=12,price_threshold=.005,oi_threshold=.01)[-1]
         self.assertEqual(s["direction"],1); self.assertIn("hypothesis",s["interpretation"])
+        # Mutating the signal bar itself must not change its lagged OI/price quadrant.
+        d[-1]["close"]=1000.; d[-1]["open_interest"]=5000.
+        s2=E.oi_price_quadrants(d,lookback_bars=12,price_threshold=.005,oi_threshold=.01)[-1]
+        self.assertEqual((s2["direction"],s2["regime"]),(s["direction"],s["regime"]))
     def test_carry_is_matched_hedge(self):
         s=E.spot_perp_funding_carry([{"timestamp":1,"funding_rate":.0002}])[0]
         self.assertTrue(s["active"]); self.assertEqual((s["spot_weight"],s["perp_weight"]),(1.,-1.))
