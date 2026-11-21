@@ -17,7 +17,7 @@ def sha(p):
  return h.hexdigest()
 
 def months():
- y,m=2023,11
+ y,m=2023,9
  while (y,m)<=(2026,10):
   yield y,m
   m+=1
