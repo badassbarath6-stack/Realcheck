@@ -69,3 +69,15 @@ These are not all ready for backtesting. The source evaluators omit native trade
 - Batch 04 added 15; duplicates, misleading labels, overlays and look-ahead-defective candidates are excluded from the unique count.
 - 7 source-derived modules remain in the branch; 4 are registered in the directional CSV runner.
 - The 100-mechanism source audit is still incomplete. No backtest has been started.
+
+
+## Source audit — Batch 05
+
+See [AUDIT_BATCH_05.md](AUDIT_BATCH_05.md). Batch 05 adds four source-reviewed mechanisms: hour-of-day seasonal entry/exit, hammer-pattern capitulation with oscillator confluence, ADX-regime stochastic exhaustion reversal, and Donchian-position/Keltner-width ratio regime. Eight additional sources were inspected and rejected or deduplicated as generic frameworks, risk overlays, defective rules or ordinary trend-indicator variants.
+
+## Current source-audit count (through Batch 05)
+
+- 27 distinct mechanisms have passed or conditionally passed source/mechanism review across Batches 01–05.
+- 7 source-derived modules remain in the branch; 4 are registered for the directional CSV runner.
+- 73 more distinct source mechanisms must be audited before the requested 100-mechanism gate is met.
+- No historical backtest has started.
