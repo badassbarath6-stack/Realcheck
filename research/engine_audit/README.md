@@ -88,3 +88,8 @@ Taker momentum requires a 5m feature CSV. OI divergence requires a 15m feature C
 - [Batch 13](AUDIT_BATCH_13.md): +2 conditional stablecoin-supply and on-chain exchange-netflow factors.
 
 Cumulative accepted/conditional source-review count: **44 of 100; 56 remain**. The audit gate is not yet satisfied. No Realcheck historical backtest has started. The existing directional CSV runner and isolated specialist registries are not evidence of a full strategy import or a backtest result.
+
+
+- [Batch 14](AUDIT_BATCH_14.md): +1 conditional dual-axis cross-sectional temporal-attention quantile model. The source reports thin IC and near-breakeven after 5 bps taker fees; no code/weights copied.
+
+Cumulative accepted/conditional source-review count: **45 of 100; 55 remain**. Audit gate remains closed; no historical Realcheck backtest has started.
