@@ -70,7 +70,7 @@ class AuditedEngineTests(unittest.TestCase):
         import registry
         self.assertEqual(set(registry.DIRECTIONAL_ENGINES), {
             "funding_rate_mean_reversion", "taker_buy_pressure_momentum",
-            "rsi_pivot_divergence", "volume_range_exhaustion"})
+            "rsi_pivot_divergence", "volume_range_exhaustion", "round_number_bounce"})
         self.assertIn("oi_price_quadrants", registry.CONDITIONAL_NOT_PROMOTED)
 
 if __name__=="__main__": unittest.main()
