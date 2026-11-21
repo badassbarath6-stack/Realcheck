@@ -60,6 +60,16 @@ class AuditedEngineTests(unittest.TestCase):
         t=A.run_directional_signals(d,signal,stop_fraction=.05,target_r=2)
         self.assertEqual(t[0]["entry_timestamp"],d[1]["timestamp"]); self.assertEqual(t[0]["exit_reason"],"stop")
         self.assertAlmostEqual(t[0]["net_bps"],-514.)
+    def test_adapter_uses_close_time_for_signal_and_marks_exit_interval(self):
+        d=bars(4)
+        for r in d: r["close_timestamp"]=r["timestamp"]+299999
+        def signal(rows): return [{"direction":1} for _ in rows]
+        t=A.run_directional_signals(d,signal,stop_fraction=.05,target_r=2)
+        self.assertEqual(t[0]["signal_timestamp"],d[0]["close_timestamp"])
+        self.assertEqual(t[0]["entry_timestamp"],d[1]["timestamp"])
+        self.assertEqual(t[0]["exit_bar_open_timestamp"],d[-1]["timestamp"])
+        self.assertEqual(t[0]["exit_bar_close_timestamp"],d[-1]["close_timestamp"])
+        self.assertEqual(t[0]["exit_time_precision"],"bar_close")
     def test_adapter_one_position_at_a_time(self):
         d=bars(8)
         def signal(rows): return [{"direction":1} for _ in rows]
