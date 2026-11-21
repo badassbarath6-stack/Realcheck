@@ -279,6 +279,8 @@ def walk_forward(
     """
     if timeframe not in {"1m","5m","15m","30m","1h","2h","4h"}:
         raise ValueError("unsupported timeframe")
+    if min(train_months,test_months,step_months)<1 or step_months!=test_months:
+        raise ValueError("walk-forward step must equal test window length to avoid overlapping OOS periods")
     if any(b["timestamp"]<=a["timestamp"] for a,b in zip(bars,bars[1:])):
         raise ValueError("bar timestamps must be strictly increasing")
     if not parameter_grid:
