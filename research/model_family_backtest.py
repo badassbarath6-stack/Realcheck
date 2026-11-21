@@ -48,11 +48,20 @@ def metrics(trades, slip_extra=0.0):
       "net_bps":sum(p),"expectancy_bps":sum(p)/len(p) if p else 0.0,
       "max_drawdown_bps":dd}
 
-def funding_paid(funding, direction, entry_ms, exit_ms):
-    # Funding is paid at each funding timestamp strictly after entry and through exit.
-    return direction*sum(rate for ts,rate in funding if entry_ms<ts<=exit_ms)*10000.0
+def funding_index(funding):
+    times=[x[0] for x in funding]
+    prefix=[0.0]
+    for _,rate in funding: prefix.append(prefix[-1]+rate)
+    return times,prefix
 
-def execute(m1, times, trigger_index, direction, stop, target, expiry_ms, funding, slip):
+def funding_paid(index, direction, entry_ms, exit_ms):
+    import bisect
+    times,prefix=index
+    lo=bisect.bisect_right(times,entry_ms)
+    hi=bisect.bisect_right(times,exit_ms)
+    return direction*(prefix[hi]-prefix[lo])*10000.0
+
+def execute(m1, times, trigger_index, direction, stop, target, expiry_ms, funding_idx, slip):
     entry_i=trigger_index+1
     if entry_i>=len(m1): return None
     entry_ms,entry=m1[entry_i][0],m1[entry_i][1]
@@ -80,7 +89,7 @@ def execute(m1, times, trigger_index, direction, stop, target, expiry_ms, fundin
         exit_ms=m1[last-1][0]; exit_px=m1[last-1][4]; reason="expiry"
     gross=direction*(exit_px-entry)/entry*10000.0
     costs=2.0*(FEE_BPS+slip)
-    paid=funding_paid(funding,direction,entry_ms,exit_ms)
+    paid=funding_paid(funding_idx,direction,entry_ms,exit_ms)
     return {"entry_ms":entry_ms,"exit_ms":exit_ms,"entry":entry,"exit":exit_px,
       "reason":reason,"gross_bps":gross,"funding_bps":paid,
       "net_bps":gross-costs-paid,"direction":"long" if direction==1 else "short"}
@@ -173,6 +182,7 @@ def run_pair(symbol,tf,data_dir,out_dir):
     tf_bars=[b for b in base.resample_m1(m1,TIMEFRAMES[tf]) if b[5]==TIMEFRAMES[tf]]
     setups=build_setups(m1,tf_bars,tf)
     times=[x[0] for x in m1]
+    funding_idx=funding_index(funding)
     trade_rows=[]
     for setup in setups:
         direction=setup["direction"]; a=setup["atr"]
@@ -183,7 +193,7 @@ def run_pair(symbol,tf,data_dir,out_dir):
         for buf in SL_BUFFERS:
             stop=setup["anchor"]-buf*a if direction==1 else setup["anchor"]+buf*a
             for rr in RR_VALUES:
-                tr=execute(m1,times,trig,direction,stop,rr,setup["expiry_ms"],funding,2.0)
+                tr=execute(m1,times,trig,direction,stop,rr,setup["expiry_ms"],funding_idx,2.0)
                 if tr is None: continue
                 tr.update({"symbol":symbol,"timeframe":tf,"family":setup["family"],
                   "event_id":setup["event_id"],"setup_ms":setup["setup_ms"],
@@ -226,7 +236,7 @@ def run_pair(symbol,tf,data_dir,out_dir):
     manifest={"symbol":symbol,"timeframe":tf,"start_utc":"2021-11-20T00:00:00Z",
       "end_utc_exclusive":"2026-11-20T00:00:00Z","families":list(FAMILIES),
       "rr_values":RR_VALUES,"sl_buffers_atr":SL_BUFFERS,"lookback_bars":LOOKBACK,
-      "expiry_bars":EXPIRY_BARS,"configuration_count":len(cfgs),
+      "expiry_bars":EXPIRY_BARS,"configuration_count":len(cfgs),"code_commit":__import__("subprocess").check_output(["git","rev-parse","HEAD"],text=True).strip(),
       "m1_rows":len(m1),"m1_gap_count":len(gaps),"timeframe_bars":len(tf_bars),
       "detected_setups":len(setups),"executed_config_trades":len(dedup),
       "fees_bps_per_side":FEE_BPS,"slippage_scenarios_bps_per_side":SLIPPAGE_BPS,
