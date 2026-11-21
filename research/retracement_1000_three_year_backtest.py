@@ -11,7 +11,7 @@ END_MS=int(datetime(2026,11,1,tzinfo=timezone.utc).timestamp()*1000)
 BASE="https://data.binance.vision/data/futures/um"
 TIMEFRAMES={"5m":5,"15m":15,"30m":30,"1h":60,"2h":120,"4h":240}
 ATR_PERIODS=(14,); THRESHOLDS=(2.4,)
-RETRACEMENTS=tuple(i/100 for i in range(1,101)); BUFFERS=(.2,)
+RETRACEMENTS=tuple(i/100 for i in range(1,101)); BUFFERS=(.2,)  # 100 evenly spaced retracement levels: 1%..100%
 RRS=(2.,); FEE_BPS=5.
 
 @dataclass(frozen=True)
