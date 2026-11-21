@@ -32,13 +32,13 @@ jobs:
           sys.path.insert(0, "research")
           import impulse_retracer_backtest as m
           assert m.ATR_PERIODS == (14,)
-          assert m.THRESHOLDS == (2.4,2.6,2.8,3.0)
+          assert m.THRESHOLDS == (2.4,)
           assert len(m.RETRACEMENTS) == 20
           assert m.RETRACEMENTS == tuple(x/100 for x in range(0,100,5))
           assert m.RRS == (2.,2.2,2.4,2.6,2.8,3.,3.5,4.,4.5,5.,5.5,6.)
           assert m.BUFFERS == (1.,1.5,2.,2.5,3.)
-          assert len(m.configurations()) == 4800
-          print("Grid verified: 4 impulse thresholds x 20 retracements x 12 RR x 5 SL buffers = 4,800")
+          assert len(m.configurations()) == 1200
+          print("Grid verified: minimum impulse >=2.4 ATR (continuous candle values) x 20 retracements x 12 RR x 5 SL buffers = 1,200")
           PY
   backtest:
     needs: validate
@@ -72,7 +72,7 @@ jobs:
           import csv, os
           p=f'research-output/{os.environ["SYMBOL"]}_{os.environ["TF"]}_all_config_metrics.csv'
           with open(p,newline='') as f: rows=list(csv.DictReader(f))
-          assert len(rows)==1200, f'expected 4800 configs, got {len(rows)}'
+          assert len(rows)==1200, f'expected 1200 configs, got {len(rows)}'
           PY
         env:
           SYMBOL: ${{ matrix.symbol }}
@@ -109,7 +109,7 @@ jobs:
           combined=[]
           for p in manifests:
               m=json.loads(p.read_text())
-              assert m["configurations"]==4800
+              assert m["configurations"]==1200
               assert m["start_utc"]=="2021-11-20T00:00:00Z"
               csvp=root/f'{m["symbol"]}_{m["timeframe"]}_all_config_metrics.csv'
               with csvp.open(newline="") as f:
