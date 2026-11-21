@@ -82,7 +82,7 @@ def main():
     if timeframe!=native_tf:
         raise ValueError(f"{a.strategy} source timeframe is {native_tf}; got {timeframe}")
     rows=load_rows(a.input)
-    missing=[k for k in required if any(k not in r for r in rows)]
+    missing=[k for k in required if not any(k in r for r in rows)]
     if missing:
         raise ValueError(f"{a.strategy} requires point-in-time columns: {missing}")
     if a.strategy=="taker_momentum" and any("volume" not in r for r in rows):
