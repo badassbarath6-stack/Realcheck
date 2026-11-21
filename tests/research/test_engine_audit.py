@@ -60,4 +60,12 @@ class AuditedEngineTests(unittest.TestCase):
         d=bars(8)
         def signal(rows): return [{"direction":1} for _ in rows]
         self.assertEqual(len(A.run_directional_signals(d,signal)),1)
+    def test_only_passed_directional_engines_are_registered(self):
+        import sys
+        sys.path.insert(0, str(ROOT))
+        import registry
+        self.assertEqual(set(registry.DIRECTIONAL_ENGINES), {
+            "funding_rate_mean_reversion", "taker_buy_pressure_momentum"})
+        self.assertIn("oi_price_quadrants", registry.CONDITIONAL_NOT_PROMOTED)
+
 if __name__=="__main__": unittest.main()
