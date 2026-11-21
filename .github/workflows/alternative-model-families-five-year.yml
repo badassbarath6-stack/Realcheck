@@ -1,0 +1,141 @@
+name: Five-Year Alternative Model-Family Research
+on:
+  push:
+    branches:
+      - research/alternative-model-families
+    paths:
+      - "research/model_family_backtest.py"
+      - "research/impulse_retracer_backtest.py"
+      - ".github/workflows/alternative-model-families-five-year.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: alternative-model-families-five-year
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/alternative-model-families
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile research runners
+        run: |
+          python -m py_compile research/impulse_retracer_backtest.py research/model_family_backtest.py
+      - name: Verify fixed comparison grid
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "research")
+          import model_family_backtest as m
+          assert m.FAMILIES == ("liquidity_sweep", "structure_break_retest", "fvg_retracement", "trend_continuation", "volatility_expansion", "hybrid_confluence")
+          assert m.RR_VALUES == (2.0, 3.0, 4.0)
+          assert m.SL_BUFFERS == (0.2, 0.5, 1.0)
+          assert len(m.FAMILIES) * len(m.RR_VALUES) * len(m.SL_BUFFERS) == 54
+          assert m.START_MS == 1637366400000
+          assert m.END_MS == 1795132800000
+          print("Validated six distinct model families x three RR values x three SL buffers = 54 configurations per asset/timeframe.")
+          PY
+  backtest:
+    needs: validate
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        symbol: [BTCUSDT, ETHUSDT]
+        timeframe: [15m, 30m, 1h, 2h, 4h]
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/alternative-model-families
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run five-year model-family comparison
+        run: |
+          python research/model_family_backtest.py \
+            --symbol "\${{ matrix.symbol }}" \
+            --timeframe "\${{ matrix.timeframe }}" \
+            --data-dir /tmp/binance \
+            --output-dir model-family-output
+      - name: Verify complete outputs
+        env:
+          SYMBOL: \${{ matrix.symbol }}
+          TF: \${{ matrix.timeframe }}
+        run: |
+          python - <<'PY'
+          import csv, json, os
+          from pathlib import Path
+          root=Path("model-family-output")
+          stem=f'{os.environ["SYMBOL"]}_{os.environ["TF"]}'
+          m=json.loads((root/f"{stem}_model_manifest.json").read_text())
+          assert m["configuration_count"] == 54
+          assert m["m1_gap_count"] == 0, f'M1 gaps: {m["m1_gap_count"]}'
+          with (root/f"{stem}_model_metrics.csv").open(newline="") as f:
+              rows=list(csv.DictReader(f))
+          assert len(rows)==54, f"expected 54 model configurations, got {len(rows)}"
+          assert (root/f"{stem}_model_trades.csv").stat().st_size > 0
+          print(f'Validated {stem}: {len(rows)} configurations, {m["detected_setups"]} setups, {m["executed_config_trades"]} config-trades.')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alternative-models-\${{ matrix.symbol }}-\${{ matrix.timeframe }}
+          path: model-family-output/
+          if-no-files-found: error
+          retention-days: 90
+  aggregate:
+    needs: backtest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/alternative-model-families
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: alternative-models-*
+          path: model-family-output
+          merge-multiple: true
+      - name: Verify and aggregate all ten runs
+        run: |
+          python - <<'PY'
+          import csv, json
+          from pathlib import Path
+          root=Path("model-family-output")
+          manifests=sorted(root.glob("*_model_manifest.json"))
+          assert len(manifests)==10, f"expected 10 manifests, got {len(manifests)}"
+          metrics=[]; trades=[]
+          for p in manifests:
+              m=json.loads(p.read_text())
+              assert m["configuration_count"]==54
+              assert m["m1_gap_count"]==0
+              stem=f'{m["symbol"]}_{m["timeframe"]}'
+              with (root/f"{stem}_model_metrics.csv").open(newline="") as f:
+                  metrics.extend(csv.DictReader(f))
+              with (root/f"{stem}_model_trades.csv").open(newline="") as f:
+                  trades.extend(csv.DictReader(f))
+          assert len(metrics)==540, f"expected 540 metric rows, got {len(metrics)}"
+          for name,rows in (("ALL_10_RUNS_MODEL_METRICS.csv",metrics),("ALL_10_RUNS_MODEL_TRADES.csv",trades)):
+              if rows:
+                  with (root/name).open("w",newline="") as f:
+                      w=csv.DictWriter(f,fieldnames=list(rows[0])); w.writeheader(); w.writerows(rows)
+          summary={"runs":len(manifests),"configuration_rows":len(metrics),"trade_rows":len(trades),
+                   "all_m1_gap_counts_zero":True,"manifests":[p.name for p in manifests]}
+          (root/"AGGREGATE_VALIDATION.json").write_text(json.dumps(summary,indent=2))
+          print(json.dumps(summary,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alternative-models-five-year-complete
+          path: model-family-output/
+          if-no-files-found: error
+          retention-days: 90
