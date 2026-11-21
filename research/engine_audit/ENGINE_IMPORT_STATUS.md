@@ -130,3 +130,12 @@ A separate source-style research path is now implemented:
 The upstream taker notebook selects SL/TP by comparing OOS Sharpe across separate walk-forward runs. That is OOS leakage. The Realcheck runner includes SL/TP in the training parameter grid and selects them on training data only. It also offers source-compatible fills for comparison, while defaulting to the user's existing conservative 5 bps fee + 2 bps slippage per side and conservative stop-gap handling.
 
 The earlier \`run_csv_backtest.py\` is a smoke/adapter runner, not the final source-style walk-forward benchmark. No backtest has been started; the 100-mechanism audit gate remains in force.
+
+
+## Source audit — Batch 09
+
+See [AUDIT_BATCH_09.md](AUDIT_BATCH_09.md). Batch 09 adds two distinct OI-confirmed crash mechanisms: liquidation-wick reversal on falling OI and crash continuation on rising OI. Both require point-in-time delayed OI, 1m quote volume and stateful event execution; the upstream repository has no declared licence, so no code was copied. The fast L2 imbalance taker, passive maker and simulator quoting rules were inspected but deduplicated into existing order-book imbalance and market-making families. The cumulative accepted/conditional source-review count is 36 of 100. No historical Realcheck backtest has started.
+
+## Source audit — Batch 10
+
+See [AUDIT_BATCH_10.md](AUDIT_BATCH_10.md). Batch 10 adds one conditional options-implied-volatility complacency regime (low trailing 90-observation Deribit DVOL percentile predicts underperformance over a 60-day horizon). Its source reports five of five walk-forward periods confirming the direction on both BTC and ETH, but it is not a costed futures trade simulation and requires point-in-time DVOL publication timestamps. The source's CVD absorption and spot/perpetual CVD leadership mechanisms were separately audited and rejected for promotion on their own negative test results; funding velocity and flow-conditioned sweep/breakout variants were deduplicated. The cumulative accepted/conditional source-review count is 37 of 100; 63 remain. No historical Realcheck backtest has started.
