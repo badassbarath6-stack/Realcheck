@@ -1,0 +1,127 @@
+name: Five-Year Retracement Parameter Grid
+on:
+  push:
+    branches:
+      - research/five-year-parameter-grid
+    paths:
+      - "research/impulse_retracer_backtest.py"
+      - ".github/workflows/retracement-parameter-grid-five-year.yml"
+  workflow_dispatch:
+concurrency:
+  group: five-year-retracement-parameter-grid
+  cancel-in-progress: false
+permissions:
+  contents: read
+  actions: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/five-year-parameter-grid
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile runner
+        run: python -m py_compile research/impulse_retracer_backtest.py
+      - name: Verify exact configuration grid
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "research")
+          import impulse_retracer_backtest as m
+          assert m.ATR_PERIODS == (14,)
+          assert m.THRESHOLDS == (2.4,)
+          assert len(m.RETRACEMENTS) == 20
+          assert m.RETRACEMENTS == tuple(x/100 for x in range(0,100,5))
+          assert m.RRS == (2.,2.2,2.4,2.6,2.8,3.,3.5,4.,4.5,5.,5.5,6.)
+          assert m.BUFFERS == (1.,1.5,2.,2.5,3.)
+          assert len(m.configurations()) == 1200
+          print("Grid verified: 20 retracements x 12 RR x 5 SL buffers = 1,200")
+          PY
+  backtest:
+    needs: validate
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        symbol: [BTCUSDT, ETHUSDT]
+        timeframe: [15m, 30m, 1h, 2h, 4h]
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/five-year-parameter-grid
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run complete five-year parameter sweep
+        run: |
+          python research/impulse_retracer_backtest.py \
+            --symbol "${{ matrix.symbol }}" \
+            --timeframe "${{ matrix.timeframe }}" \
+            --data-dir /tmp/binance \
+            --output-dir research-output
+      - name: Verify outputs and 1,200 configurations
+        run: |
+          test -s research-output/${{ matrix.symbol }}_${{ matrix.timeframe }}_manifest.json
+          test -s research-output/${{ matrix.symbol }}_${{ matrix.timeframe }}_all_config_metrics.csv
+          python - <<'PY'
+          import csv, os
+          p=f'research-output/{os.environ["SYMBOL"]}_{os.environ["TF"]}_all_config_metrics.csv'
+          with open(p,newline='') as f: rows=list(csv.DictReader(f))
+          assert len(rows)==1200, f'expected 1200 configs, got {len(rows)}'
+          PY
+        env:
+          SYMBOL: ${{ matrix.symbol }}
+          TF: ${{ matrix.timeframe }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: five-year-grid-${{ matrix.symbol }}-${{ matrix.timeframe }}
+          path: research-output/
+          if-no-files-found: error
+          retention-days: 30
+  aggregate:
+    needs: backtest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/five-year-parameter-grid
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: five-year-grid-*
+          path: research-output
+          merge-multiple: true
+      - name: Verify all ten runs and combine metrics
+        run: |
+          python - <<'PY'
+          import csv, json
+          from pathlib import Path
+          root=Path("research-output")
+          manifests=sorted(root.glob("*_manifest.json"))
+          assert len(manifests)==10, f"expected 10 manifests, got {len(manifests)}"
+          combined=[]
+          for p in manifests:
+              m=json.loads(p.read_text())
+              assert m["configurations"]==1200
+              assert m["start_utc"]=="2021-11-20T00:00:00Z"
+              csvp=root/f'{m["symbol"]}_{m["timeframe"]}_all_config_metrics.csv'
+              with csvp.open(newline="") as f:
+                  for r in csv.DictReader(f):
+                      r["symbol"]=m["symbol"]; r["timeframe"]=m["timeframe"]; combined.append(r)
+          with (root/"ALL_10_RUNS_ALL_CONFIGS.csv").open("w",newline="") as f:
+              w=csv.DictWriter(f,fieldnames=list(combined[0])); w.writeheader(); w.writerows(combined)
+          print(f"Verified {len(manifests)} manifests and {len(combined)} configuration rows.")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: five-year-grid-complete-results
+          path: research-output/
+          if-no-files-found: error
+          retention-days: 90
