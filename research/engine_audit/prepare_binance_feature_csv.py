@@ -126,10 +126,11 @@ def build_feature_csv(klines, funding, output: Path, *, timeframe_minutes=1, str
     fields=["timestamp","close_timestamp","open","high","low","close","volume",
             "taker_buy_base_volume","buy_ratio"]
     if funding:
-        fields.append("funding_rate")
+        fields.extend(["funding_rate","funding_age_ms"])
     output.parent.mkdir(parents=True,exist_ok=True)
     funding_idx=0
     last_rate=0.0
+    last_funding_time=None
     max_funding_age=0
     with output.open("w",newline="") as f:
         writer=csv.DictWriter(f,fieldnames=fields)
@@ -138,9 +139,10 @@ def build_feature_csv(klines, funding, output: Path, *, timeframe_minutes=1, str
             if funding:
                 while funding_idx<len(funding_times) and funding_times[funding_idx]<=open_ms:
                     last_rate=funding_values[funding_idx]
+                    last_funding_time=funding_times[funding_idx]
                     funding_idx+=1
-                if funding_idx:
-                    age=open_ms-funding_times[funding_idx-1]
+                age=open_ms-last_funding_time if last_funding_time is not None else None
+                if age is not None:
                     max_funding_age=max(max_funding_age,age)
             ratio=taker/volume if volume>0 else 0.5
             row={"timestamp":open_ms,"close_timestamp":close_ms,"open":o,"high":h,
@@ -148,6 +150,7 @@ def build_feature_csv(klines, funding, output: Path, *, timeframe_minutes=1, str
                  "buy_ratio":ratio}
             if funding:
                 row["funding_rate"]=last_rate
+                row["funding_age_ms"]="" if age is None else age
             writer.writerow(row)
     return {"m1_rows":len(klines),"bars":len(bars),"timeframe_minutes":timeframe_minutes,
             "first_open_ms":bars[0][0],"last_open_ms":bars[-1][0],
