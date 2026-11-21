@@ -59,3 +59,21 @@ Batch 07 adds two conditional mechanisms. The cumulative accepted/conditional so
 
 
 Batch 08 adds one conditional ETF-flow/stablecoin-supply liquidity-regime candidate. The cumulative accepted/conditional source-review count is 34 of 100; 66 remain. See [AUDIT_BATCH_08.md](AUDIT_BATCH_08.md). No historical backtest has started.
+
+
+## Backtest preparation tools
+
+The final source-style backtest path is separate from the simple CSV smoke runner:
+
+\`\`\`bash
+python research/engine_audit/prepare_binance_feature_csv.py \\
+  --klines-dir data/BTCUSDT/klines --funding-dir data/BTCUSDT/funding \\
+  --timeframe 15m --output data/BTCUSDT/15m_features.csv
+
+python research/engine_audit/run_walk_forward.py \\
+  --strategy funding_mr --symbol BTCUSDT \\
+  --input data/BTCUSDT/15m_features.csv \\
+  --output-dir results/BTCUSDT/funding_mr
+\`\`\`
+
+Taker momentum requires a 5m feature CSV. OI divergence requires a 15m feature CSV plus timestamped metrics merged with \`prepare_metrics_features.py\`; stale metrics fail closed. The walk-forward runner defaults to the established conservative 5 bps fee and 2 bps slippage per side, and it selects all parameters using training data only. These commands are preparation examples, not evidence that any backtest has run.
