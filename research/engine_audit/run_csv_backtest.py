@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Run audited directional signal engines on a feature-enriched OHLCV CSV.
+"""Run audited directional mechanisms on a feature-enriched OHLCV CSV.
 
-Required columns: timestamp,open,high,low,close.
-Optional engine columns: funding_rate,buy_ratio,open_interest,taker_ls_vol_ratio.
-Signals are evaluated at close and filled at the next bar open. This is a
-research harness, not live execution and not a substitute for native exits.
+Signal is computed using completed bar i; entry is next bar i+1 open.
+The fixed stop/target is an explicit common evaluation overlay, not the
+upstream strategy's native exit rule. Specialist two-leg and L2 engines are
+intentionally excluded from this candle-only runner.
 """
 from __future__ import annotations
 import argparse, csv, json, sys
@@ -13,11 +13,14 @@ from pathlib import Path
 HERE=Path(__file__).resolve().parent
 sys.path.insert(0,str(HERE))
 from engines import funding_rate_mean_reversion, taker_buy_pressure_momentum
+from price_action_engines import rsi_pivot_divergence, volume_range_exhaustion
 from adapter import run_directional_signals
 
 ENGINES={
     "funding_rate_mean_reversion": funding_rate_mean_reversion,
     "taker_buy_pressure_momentum": taker_buy_pressure_momentum,
+    "rsi_pivot_divergence": rsi_pivot_divergence,
+    "volume_range_exhaustion": volume_range_exhaustion,
 }
 REQUIRED=("timestamp","open","high","low","close")
 
@@ -32,7 +35,8 @@ def load_rows(path: Path):
         item={"timestamp":int(float(r["timestamp"]))}
         for k in ("open","high","low","close"):
             item[k]=float(r[k])
-        for k in ("funding_rate","buy_ratio","open_interest","taker_ls_vol_ratio","realized_vol_30d","volume"):
+        for k in ("funding_rate","buy_ratio","open_interest","taker_ls_vol_ratio",
+                  "realized_vol_30d","volume"):
             if r.get(k,"") not in ("",None): item[k]=float(r[k])
         if min(item["open"],item["high"],item["low"],item["close"])<=0:
             raise ValueError(f"non-positive OHLC at CSV line {n}")
@@ -54,6 +58,12 @@ def main():
     p.add_argument("--slippage-bps",type=float,default=2.)
     a=p.parse_args()
     rows=load_rows(a.input)
+    if a.engine=="volume_range_exhaustion" and any("volume" not in r for r in rows):
+        raise ValueError("volume_range_exhaustion requires volume in every row")
+    if a.engine=="taker_buy_pressure_momentum" and any("buy_ratio" not in r for r in rows):
+        raise ValueError("taker_buy_pressure_momentum requires buy_ratio in every row")
+    if a.engine=="funding_rate_mean_reversion" and any("funding_rate" not in r for r in rows):
+        raise ValueError("funding_rate_mean_reversion requires point-in-time funding_rate")
     trades=run_directional_signals(rows,ENGINES[a.engine],stop_fraction=a.stop_fraction,
         target_r=a.target_r,fee_bps_per_side=a.fee_bps,slippage_bps_per_side=a.slippage_bps)
     a.output.parent.mkdir(parents=True,exist_ok=True)
@@ -66,6 +76,7 @@ def main():
         "wins":sum(x["net_bps"]>0 for x in trades),"net_bps":sum(x["net_bps"] for x in trades),
         "profit_factor":gp/gl if gl else (999. if gp else 0.),
         "expectancy_bps":sum(x["net_bps"] for x in trades)/len(trades) if trades else 0.,
-        "exit_model":"adapter_fixed_fractional_stop_target"}
+        "exit_model":"adapter_fixed_fractional_stop_target",
+        "not_native_exit_fidelity":True}
     print(json.dumps(summary,indent=2))
 if __name__=="__main__": main()
