@@ -14,3 +14,13 @@ The source projects below were inspected at implementation level. Their mathemat
 The upstream funding-fade repository did not expose a clear licence in the inspected root listing, so its logic was reimplemented independently. The market-making repository identifies WTFPL. The ports preserve signal/economic structure, not the upstream projects' execution wrappers or risk settings.
 
 The cross-venue OU project was excluded pending correction of a rolling-median backward-fill look-ahead defect. Compression breakout remains uncounted pending deduplication against Donchian/Turtle.
+
+
+| Mechanism | Source implementation | Port |
+|---|---|---|
+| Psychological round-number bounce | https://github.com/stooq1/strategy-graveyard/blob/main/trading_analyzer/strategies/round_numbers.py | specialist_signal_engines.round_number_bounce |
+| Tested liquidity-wall pull | https://github.com/stooq1/strategy-graveyard/blob/main/trading_analyzer/detectors/walls.py | specialist_signal_engines.wall_pull_detector |
+| Top-N depth imbalance z-score | https://github.com/stooq1/strategy-graveyard/blob/main/trading_analyzer/detectors/walls.py | specialist_signal_engines.book_imbalance_zscore |
+| Correlation-break recovery | https://github.com/stooq1/strategy-graveyard/blob/main/trading_analyzer/detectors/satellite.py | specialist_signal_engines.correlation_break_recovery |
+
+These four ports are clean-room or MIT-attributed reimplementations. L2 and paired-stream signals remain isolated from the OHLCV-only candle runner.
