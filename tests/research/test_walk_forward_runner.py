@@ -28,6 +28,16 @@ class WalkForwardRunnerTests(unittest.TestCase):
         tf,g,fn,req=runner.strategy_spec("oi_divergence")
         self.assertEqual(tf,"15m"); self.assertEqual(len(g),216)
 
+    def test_derivatives_data_gate_rejects_stale_funding_and_oi(self):
+        funding=[{"funding_age_ms":1000},{"funding_age_ms":25*3600000}]
+        with self.assertRaisesRegex(ValueError,"stale"):
+            runner.validate_and_trim_data(funding,"funding_mr")
+        oi=[{}, {}, {"open_interest_age_ms":300000,"taker_ls_age_ms":300000},
+            {"open_interest_age_ms":20*60000,"taker_ls_age_ms":300000}]
+        with self.assertRaisesRegex(ValueError,"stale"):
+            runner.validate_and_trim_data(oi,"oi_divergence")
+        clean=[{}, {"open_interest_age_ms":300000,"taker_ls_age_ms":300000}]
+        self.assertEqual(len(runner.validate_and_trim_data(clean,"oi_divergence")),1)
     def test_imported_source_signal_wrappers_are_prefix_causal(self):
         d=bars()
         for name in ("funding_mr","taker_momentum","oi_divergence"):
