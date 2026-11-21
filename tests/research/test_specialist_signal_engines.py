@@ -37,17 +37,21 @@ class SpecialistSignalEngineTests(unittest.TestCase):
 
     def test_correlation_break_recovery_is_point_in_time(self):
         primary=[]; pair=[]
+        px=py=100.0
         for i in range(80):
-            # Pair and primary correlate in the first segment, diverge, then re-align.
-            p=100.0+i*0.1
-            if 30<=i<55:
-                p+=((i%2)*2-1)*2.0
-            primary.append({"timestamp":i,"close":100.0+i*0.1+(((i%2)*2-1)*2.0 if 30<=i<55 else 0.0)})
-            pair.append({"timestamp":i,"close":p})
-        sig=correlation_break_recovery(primary,pair,{"window":10,"break_thr":0.2,"recovery_thr":0.5,"rel_scale":0.05})
-        self.assertTrue(all(x["timestamp"]==i for i,x in enumerate(sig)))
-        # The function must never use pair data with a timestamp later than the primary bar.
-        truncated=correlation_break_recovery(primary[:40],pair,{"window":10,"break_thr":0.2,"recovery_thr":0.5,"rel_scale":0.05})
-        self.assertEqual(len(truncated),40)
+            if i:
+                pair_return=0.01 if i%2 else -0.01
+                primary_return=pair_return if i<15 or i>=25 else -pair_return
+                py*=1.0+pair_return
+                px*=1.0+primary_return
+            primary.append({"timestamp":i,"close":px})
+            pair.append({"timestamp":i,"close":py})
+        params={"window":3,"break_thr":0.0,"recovery_thr":0.5,"rel_scale":0.05}
+        sig=correlation_break_recovery(primary,pair,params)
+        self.assertTrue(any(x["direction"]!=0 for x in sig[25:]))
+        # Future pair observations must not alter outputs before their timestamps.
+        truncated=correlation_break_recovery(primary[:40],pair,params)
+        matched=correlation_break_recovery(primary[:40],pair[:40],params)
+        self.assertEqual(truncated,matched)
 
 if __name__=="__main__": unittest.main()
