@@ -23,7 +23,7 @@ class WalkForwardRunnerTests(unittest.TestCase):
         self.assertEqual(tf,"15m"); self.assertEqual(len(g),81)
         self.assertEqual(set(req),{"funding_rate","buy_ratio"})
         tf,g,fn,req=runner.strategy_spec("taker_momentum")
-        self.assertEqual(tf,"5m"); self.assertEqual(len(g),144)
+        self.assertEqual(tf,"5m"); self.assertEqual(len(g),108)
         self.assertTrue(all(p["tp_pct"]>p["sl_pct"] for p in g))
         tf,g,fn,req=runner.strategy_spec("oi_divergence")
         self.assertEqual(tf,"15m"); self.assertEqual(len(g),216)
