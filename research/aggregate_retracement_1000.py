@@ -8,9 +8,9 @@ for manifest_path in sorted(root.glob("*_manifest.json")):
     m=json.loads(manifest_path.read_text())
     p=root/f'{m["symbol"]}_{m["timeframe"]}_all_config_metrics.csv'
     with p.open(newline="") as f: rows=list(csv.DictReader(f))
-    eligible=[r for r in rows if int(float(r["validation_trades"]))>=50]
+    eligible=[r for r in rows if all(int(float(r[f"{period}_trades"]))>=10 for period in ("train","validation","oos"))]
     eligible.sort(key=lambda r:(float(r["validation_pf"]),float(r["validation_net_bps"])),reverse=True)
-    print(f'\n{m["symbol"]} {m["timeframe"]}: {len(eligible)}/1000 configs meet 50 validation trades')
+    print(f'\n{m["symbol"]} {m["timeframe"]}: {len(eligible)}/100 configs meet 10 trades in each split')
     for r in eligible[:5]:
         print("  retr={:.3f} ({:.1f}%) | val n={} WR={:.1f}% PF={:.3f} net={:.1f}bps | OOS n={} WR={:.1f}% PF={:.3f} net={:.1f}bps DD={:.1f}bps".format(
             float(r["retracement"]),float(r["retracement"])*100,int(float(r["validation_trades"])),
