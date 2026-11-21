@@ -55,3 +55,17 @@ See [AUDIT_BATCH_02.md](AUDIT_BATCH_02.md). Climax Fade and Momentum Decay passe
 - OI/price quadrant remains conditional; duplicates, defects and out-of-scope options are not counted.
 - No 100-mechanism completion claim and no strategy backtest has been started.
 - Batch 03 report: [AUDIT_BATCH_03.md](AUDIT_BATCH_03.md).
+
+
+## Source audit — Batch 04
+
+See [AUDIT_BATCH_04.md](AUDIT_BATCH_04.md). Batch 04 inspected 25 evaluator functions in CShear/crack-the-nut and additional Freqtrade strategy implementations. It added 15 source-reviewed mechanisms at mechanism level: rolling-high proximity, Bollinger/RSI reversion, funding-surface regime, funding term-structure reversion, volatility-squeeze release, realized-volatility term structure, cross-sectional funding relative value, funding-settlement calendar, relative-strength residual breakout, beta-compression trigger, multi-voter consensus fade, disagreement/compression breakout, 3-hour ATR impulse breakout with pyramiding, TD Sequential 9-count exhaustion, and VWAP-band capitulation.
+
+These are not all ready for backtesting. The source evaluators omit native trade state/exits; the Freqtrade examples need their exact ROI/stop/pyramiding behavior and point-in-time timing. No generic fixed-RR adapter is being represented as exact native behavior. GPL-3.0 source is not copied into Realcheck without licence compatibility; CShear's README says MIT but its root LICENSE was not present, so clean-room reimplementation only.
+
+## Current source-audit count (through Batch 04)
+
+- 23 distinct mechanisms have passed or conditionally passed source/mechanism review across Batches 01–04.
+- Batch 04 added 15; duplicates, misleading labels, overlays and look-ahead-defective candidates are excluded from the unique count.
+- 7 source-derived modules remain in the branch; 4 are registered in the directional CSV runner.
+- The 100-mechanism source audit is still incomplete. No backtest has been started.
