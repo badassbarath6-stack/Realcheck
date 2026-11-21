@@ -57,15 +57,46 @@ def fetch_archive(url,target):
         target.unlink(missing_ok=True); raise ValueError(f"SHA-256 mismatch for {url}: expected {match.group(1)}, got {actual}")
     return target
 
+def fetch_daily_rest_archive(symbol, day, target):
+    """Fetch one completed M1 day from Binance USD-M Futures REST and cache it as ZIP/CSV."""
+    target=Path(target); target.parent.mkdir(parents=True,exist_ok=True)
+    if target.exists() and target.stat().st_size:
+        try:
+            with zipfile.ZipFile(target) as z:
+                if z.testzip() is None and any(n.endswith(".csv") for n in z.namelist()):
+                    return target
+        except zipfile.BadZipFile:
+            pass
+        target.unlink(missing_ok=True)
+    start=int(datetime(2026,11,day,tzinfo=timezone.utc).timestamp()*1000)
+    end=start+86400000-1
+    query=urllib.parse.urlencode({"symbol":symbol,"interval":"1m","startTime":start,"endTime":end,"limit":1500})
+    req=urllib.request.Request("https://fapi.binance.com/fapi/v1/klines?"+query,
+                               headers={"User-Agent":"ImpulseRetracerResearch/1.0"})
+    with urllib.request.urlopen(req,timeout=120) as response:
+        rows=json.loads(response.read())
+    if not isinstance(rows,list) or len(rows)!=1440:
+        raise RuntimeError(f"Binance REST M1 coverage incomplete for {symbol} 2026-11-{day:02d}: expected 1440 rows, received {len(rows) if isinstance(rows,list) else 'invalid response'}")
+    import io
+    payload=io.StringIO()
+    writer=csv.writer(payload)
+    writer.writerows(rows)
+    temp=target.with_suffix(".tmp")
+    with zipfile.ZipFile(temp,"w",compression=zipfile.ZIP_DEFLATED) as z:
+        z.writestr(f"{symbol}-1m-2026-11-{day:02d}.csv",payload.getvalue())
+    temp.replace(target)
+    return target
+
 def download_inputs(symbol,data_dir):
     paths=[]
     for y,m in month_files(symbol):
         name=f"{symbol}-1m-{y}-{m:02d}.zip"
         paths.append(fetch_archive(f"{BASE}/monthly/klines/{symbol}/1m/{name}",Path(data_dir)/name))
-    # The current monthly archive is not published until month-end; add daily files.
+    # Binance Vision daily archives can lag or return 404 for recent dates.
+    # Use the official Futures REST endpoint for the completed partial-month days.
     for day in range(1,21):
         name=f"{symbol}-1m-2026-11-{day:02d}.zip"
-        paths.append(fetch_archive(f"{BASE}/daily/klines/{symbol}/1m/{name}",Path(data_dir)/name))
+        paths.append(fetch_daily_rest_archive(symbol,day,Path(data_dir)/name))
     return paths
 
 def load_klines(paths):
