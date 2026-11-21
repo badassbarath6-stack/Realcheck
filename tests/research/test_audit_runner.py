@@ -24,15 +24,16 @@ class AuditRunnerTests(unittest.TestCase):
             p=Path(d)/"bars.csv"
             with p.open("w",newline="") as f:
                 w=csv.DictWriter(f,fieldnames=[
-                    "open_time","open","high","low","close","volume",
+                    "open_time","close_time","open","high","low","close","volume",
                     "taker_buy_base_volume","funding_rate"])
                 w.writeheader()
-                w.writerow({"open_time":1,"open":100,"high":101,"low":99,"close":100,
+                w.writerow({"open_time":1,"close_time":60000,"open":100,"high":101,"low":99,"close":100,
                     "volume":50,"taker_buy_base_volume":30,"funding_rate":0.0002})
-                w.writerow({"open_time":2,"open":100,"high":102,"low":99,"close":101,
+                w.writerow({"open_time":2,"close_time":120000,"open":100,"high":102,"low":99,"close":101,
                     "volume":60,"taker_buy_base_volume":36,"funding_rate":0.0002})
             rows=runner.load_rows(p)
             self.assertEqual(rows[0]["timestamp"],1)
+            self.assertEqual(rows[0]["close_timestamp"],60000)
             self.assertEqual(rows[0]["volume"],50.0)
             self.assertAlmostEqual(rows[0]["buy_ratio"],0.6)
             self.assertEqual(rows[0]["funding_rate"],0.0002)
