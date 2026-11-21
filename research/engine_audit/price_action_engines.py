@@ -74,7 +74,7 @@ def rsi_pivot_divergence(rows: Sequence[Mapping[str, Any]], params: dict | None 
         raise ValueError("invalid RSI divergence parameters")
     close = [float(r["close"]) for r in rows]
     rsi = _rsi_ewm(close, period)
-    out = [{"timestamp":r["timestamp"],"direction":0,"mechanism":"rsi_pivot_divergence"} for r in rows]
+    out = [{"timestamp":r["timestamp"],"direction":0,"strength":0.0,"mechanism":"rsi_pivot_divergence"} for r in rows]
     last_low = last_high = None
     for confirm in range(2 * order, len(rows)):
         pivot = confirm - order
@@ -85,14 +85,14 @@ def rsi_pivot_divergence(rows: Sequence[Mapping[str, Any]], params: dict | None 
                 prev_i = last_low
                 if pivot - prev_i <= max_gap and _finite(rsi[pivot]) and _finite(rsi[prev_i]):
                     if close[pivot] < close[prev_i] and rsi[pivot] > rsi[prev_i]:
-                        out[confirm]["direction"] = 1
+                        out[confirm]["direction"] = 1\n                        out[confirm]["strength"] = min(1.0, abs(close[pivot] / close[prev_i] - 1.0))
             last_low = pivot
         if close[pivot] == max(window):
             if last_high is not None:
                 prev_i = last_high
                 if pivot - prev_i <= max_gap and _finite(rsi[pivot]) and _finite(rsi[prev_i]):
                     if close[pivot] > close[prev_i] and rsi[pivot] < rsi[prev_i]:
-                        out[confirm]["direction"] = -1
+                        out[confirm]["direction"] = -1\n                        out[confirm]["strength"] = min(1.0, abs(close[pivot] / close[prev_i] - 1.0))
             last_high = pivot
     return out
 
@@ -120,7 +120,7 @@ def volume_range_exhaustion(rows: Sequence[Mapping[str, Any]], params: dict | No
         raise ValueError("invalid exhaustion parameters")
     close = [float(r["close"]) for r in rows]
     volume = [float(r["volume"]) for r in rows]
-    ranges = [(float(r["high"])-float(r["low"]))/float(r["close"]) for r in rows]
+    \n    if any(float(r["close"]) <= 0 for r in rows):\n        raise ValueError("close must be positive for range normalization")\n    ranges = [(float(r["high"])-float(r["low"]))/float(r["close"]) for r in rows]
     vfast, vslow = _rolling_mean(volume, vol_fast), _rolling_mean(volume, vol_slow)
     rfast, rslow = _rolling_mean(ranges, vol_fast), _rolling_mean(ranges, vol_slow)
     out=[]
