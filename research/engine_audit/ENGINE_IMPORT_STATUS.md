@@ -93,3 +93,14 @@ See [AUDIT_BATCH_06.md](AUDIT_BATCH_06.md). Batch 06 adds four unique mechanisms
 - 69 more distinct mechanisms must be source-audited before the requested 100-mechanism gate is met.
 - 6 Python strategy modules exist; 5 candle engines are registered in the CSV runner and 3 specialist score engines are registered separately.
 - No historical backtest has started.
+
+
+## Source audit — Batch 07
+
+See [AUDIT_BATCH_07.md](AUDIT_BATCH_07.md). Batch 07 adds two conditional mechanisms: three-scale momentum confluence with slow-scale exits, and an ADX-switched trend-following/mean-reversion state machine. Both require the external Flint indicator library and stateful execution semantics before exact import. Other inspected files were deduplicated into existing momentum, squeeze, residual-stat-arb, mean-reversion, lead-lag and climax families.
+
+## Current source-audit count (through Batch 07)
+
+- 33 distinct mechanisms have passed or conditionally passed source/mechanism review across Batches 01–07.
+- 67 more distinct mechanisms must be audited before the requested 100-mechanism gate is met.
+- No historical backtest has started.
