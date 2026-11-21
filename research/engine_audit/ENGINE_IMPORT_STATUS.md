@@ -154,3 +154,8 @@ See [AUDIT_BATCH_12.md](AUDIT_BATCH_12.md). Batch 12 adds four distinct profile/
 ## Source audit — Batch 13
 
 See [AUDIT_BATCH_13.md](AUDIT_BATCH_13.md). Batch 13 adds two conditional mechanisms: lagged seven-day DeFiLlama stablecoin-supply growth as a macro liquidity regime filter, and lagged seven-day Dune ERC-20 exchange netflow ranked cross-sectionally as a long/short futures factor. Both require point-in-time source timestamps and additional OOS verification; the ETF-flow input was a synthetic fixture, the macro DXY filter failed its own cost-adjusted risk test, and the liquidation proxy was deduplicated with the OI-confirmed crash family. No code copied. Cumulative accepted/conditional source-review count: 44 of 100; 56 remain. No historical Realcheck backtest has started.
+
+
+## Source audit — Batch 14
+
+See [AUDIT_BATCH_14.md](AUDIT_BATCH_14.md). Batch 14 adds one conditional model family: a dual-axis cross-sectional temporal-attention transformer with a monotonic quantile head, trained on causal normalized OHLCV panels and translated into dollar-neutral, risk-equalized long/short weights. The upstream README reports IC around 0.025 but explicitly says 5 bps taker friction compresses it near breakeven; no weights or code were copied because the repository has no declared licence. It requires a full multi-asset model pipeline and is not suitable for the candle-only runner. Cumulative accepted/conditional source-review count: 45 of 100; 55 remain. No historical Realcheck backtest has started.
