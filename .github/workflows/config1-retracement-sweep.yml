@@ -1,0 +1,112 @@
+name: Config 1 Fixed Impulse - Config 2 Retracement Sweep
+on:
+  push:
+    branches:
+      - research/config1-fixed-retracement-sweep
+    paths:
+      - "research/config1_retracement_backtest.py"
+      - "research/aggregate_config1_retracement.py"
+      - ".github/workflows/config1-retracement-sweep.yml"
+  workflow_dispatch:
+concurrency:
+  group: config1-fixed-retracement-sweep
+  cancel-in-progress: false
+permissions:
+  contents: read
+  actions: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/config1-fixed-retracement-sweep
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile runner and aggregator
+        run: python -m py_compile research/config1_retracement_backtest.py research/aggregate_config1_retracement.py
+      - name: Existing research tests
+        run: python -m unittest discover -s tests/research -v
+      - name: Verify frozen Config 1 and all 1000 Config 2 values
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "research")
+          import config1_retracement_backtest as m
+          expected={"5m":5.0,"15m":5.0,"30m":5.0,"1h":2.6,"2h":2.6,"4h":2.6}
+          assert m.THRESHOLDS_BY_TF == expected
+          for tf in expected:
+              configs=m.configurations(tf)
+              assert len(configs)==1000, (tf,len(configs))
+              assert configs[0].retracement==0.001 and configs[-1].retracement==1.0
+              assert {c.impulse_atr for c in configs}=={expected[tf]}
+          print("Validated frozen Config 1 and 1000 retracement fractions per timeframe.")
+          PY
+  backtest:
+    needs: validate
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        symbol: [BTCUSDT, ETHUSDT]
+        timeframe: [5m, 15m, 30m, 1h, 2h, 4h]
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/config1-fixed-retracement-sweep
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run 1000-point retracement sweep with frozen Config 1
+        run: |
+          python research/config1_retracement_backtest.py \
+            --symbol "${{ matrix.symbol }}" \
+            --timeframe "${{ matrix.timeframe }}" \
+            --data-dir /tmp/binance \
+            --output-dir research-output
+      - name: Verify complete outputs and frozen impulse
+        run: |
+          test -s research-output/${{ matrix.symbol }}_${{ matrix.timeframe }}_manifest.json
+          test -s research-output/${{ matrix.symbol }}_${{ matrix.timeframe }}_all_config_metrics.csv
+          python - <<'PY'
+          import csv, json, os
+          sym,tf=os.environ["SYMBOL"],os.environ["TF"]
+          root="research-output"
+          m=json.load(open(f"{root}/{sym}_{tf}_manifest.json"))
+          assert m["configurations"]==1000
+          assert m["m1_gap_count"]==0
+          assert m["config_grid"]["impulse_atr_multipliers"]==[m["config1_impulse_minimum_atr_by_timeframe"][tf]]
+          with open(f"{root}/{sym}_{tf}_all_config_metrics.csv",newline="") as f: rows=list(csv.DictReader(f))
+          assert len(rows)==1000, f"expected 1000 configs, got {len(rows)}"
+          assert len({float(r["retracement"]) for r in rows})==1000
+          assert all(float(r["impulse_atr"])==m["config1_impulse_minimum_atr_by_timeframe"][tf] for r in rows)
+          PY
+        env:
+          SYMBOL: ${{ matrix.symbol }}
+          TF: ${{ matrix.timeframe }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: config1-retracement-${{ matrix.symbol }}-${{ matrix.timeframe }}
+          path: research-output/
+          if-no-files-found: error
+          retention-days: 30
+  aggregate:
+    needs: backtest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/config1-fixed-retracement-sweep
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: config1-retracement-*
+          path: research-output
+          merge-multiple: true
+      - name: Verify all 12 datasets and print summary
+        run: python research/aggregate_config1_retracement.py
