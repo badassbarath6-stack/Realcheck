@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Three-year independent 1,000-point retracement-only research backtest."""
+"""Three-year independent 100-point retracement-only research backtest."""
 from __future__ import annotations
 import argparse, csv, hashlib, itertools, json, math, re, subprocess, urllib.request, urllib.error, urllib.parse, zipfile
 from dataclasses import dataclass, asdict
@@ -11,7 +11,7 @@ END_MS=int(datetime(2026,11,1,tzinfo=timezone.utc).timestamp()*1000)
 BASE="https://data.binance.vision/data/futures/um"
 TIMEFRAMES={"5m":5,"15m":15,"30m":30,"1h":60,"2h":120,"4h":240}
 ATR_PERIODS=(14,); THRESHOLDS=(2.4,)
-RETRACEMENTS=tuple(i/1000 for i in range(1,1001)); BUFFERS=(.2,)
+RETRACEMENTS=tuple(i/100 for i in range(1,101)); BUFFERS=(.2,)
 RRS=(2.,); FEE_BPS=5.
 
 @dataclass(frozen=True)
@@ -361,7 +361,7 @@ def run_pair(symbol,tf,data_dir,out_dir):
     rows.sort(key=lambda x:(x["validation_pf"],x["validation_net_bps"]),reverse=True)
     out=Path(out_dir); out.mkdir(parents=True,exist_ok=True)
     write_csv(out/f"{symbol}_{tf}_all_config_metrics.csv",rows)
-    write_csv(out/f"{symbol}_{tf}_validation_ranked.csv",[x for x in rows if x["validation_trades"]>=50],list(rows[0]))
+    write_csv(out/f"{symbol}_{tf}_validation_ranked.csv",[x for x in rows if all(x[f"{period}_trades"]>=10 for period in ("train","validation","oos"))],list(rows[0]))
     trade_rows=[]
     for name,data in (("train",train),("validation",validation),("oos",oos)):
         for x in data:
@@ -371,7 +371,7 @@ def run_pair(symbol,tf,data_dir,out_dir):
             trade_rows.append(y)
     write_csv(out/f"{symbol}_{tf}_selected_trades.csv",trade_rows,["entry_ms","exit_ms","entry","exit","reason","gross_bps","net_bps","holding_minutes","funding_bps","event_id","trigger_ms","impulse_ms","direction","period","atr_period","impulse_atr","retracement","sl_buffer","rr"])
     manifest={"symbol":symbol,"timeframe":tf,"start_utc":"2023-11-01T00:00:00Z","end_utc_exclusive":"2026-11-01T00:00:00Z",
-              "configurations":len(configurations()),"minimum_validation_trades":50,"config_grid":{"atr_periods":ATR_PERIODS,"impulse_atr_multipliers":THRESHOLDS,
+              "configurations":len(configurations()),"minimum_trades_per_split_for_consideration":10,"config_grid":{"atr_periods":ATR_PERIODS,"impulse_atr_multipliers":THRESHOLDS,
               "retracements":RETRACEMENTS,"sl_buffers_atr":BUFFERS,"reward_risk":RRS,
               "pending_expiry_complete_bars":3},"code_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
               "m1_rows":len(m1),"m1_gap_count":len(gaps),
@@ -381,7 +381,7 @@ def run_pair(symbol,tf,data_dir,out_dir):
               "funding_files":[{"name":p.name,"sha256":sha256(p)} for p in funding_files],"funding_missing_archives":funding_missing,
               "fees_bps_per_side":FEE_BPS,"slippage_scenarios_bps_per_side":[2.,7.],"split_boundaries_ms":split_bounds(),
               "funding":"Binance Vision monthly fundingRate archives; unavailable archives are excluded and listed","funding_rate_rows":len(funding),"funding_first_timestamp":funding[0][0] if funding else None,"funding_last_timestamp":funding[-1][0] if funding else None,
-              "method":"Each of 1,000 retracement fractions independently evaluates every detected impulse; prior completed timeframe ATR; M1 retracement trigger; next M1 open entry; stop-first; expiry after three subsequent complete TF bars; no cross-config signal suppression",
+              "method":"Each of 100 retracement fractions independently evaluates every detected impulse; prior completed timeframe ATR; M1 retracement trigger; next M1 open entry; stop-first; expiry after three subsequent complete TF bars; no cross-config signal suppression",
               "status":"BACKTEST_WITH_AVAILABLE_FUNDING"}
     (out/f"{symbol}_{tf}_manifest.json").write_text(json.dumps(manifest,indent=2))
     print(json.dumps(manifest,indent=2))
