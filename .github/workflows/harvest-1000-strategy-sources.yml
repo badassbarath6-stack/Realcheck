@@ -1,0 +1,46 @@
+name: Harvest 1000 Strategy Implementations
+on:
+  push:
+    branches:
+      - research/harvest-1000-source-implementations
+    paths:
+      - "research/engine_audit/harvest_1000_sources.py"
+      - ".github/workflows/harvest-1000-strategy-sources.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/harvest-1000-source-implementations
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch source repositories and harvest exact implementations
+        run: python research/engine_audit/harvest_1000_sources.py
+      - name: Verify exact source count and provenance
+        run: |
+          python - <<'PY'
+          import csv, hashlib
+          from pathlib import Path
+          root=Path("source-harvest")
+          rows=list(csv.DictReader((root/"manifest.csv").open()))
+          assert len(rows)==1000, len(rows)
+          assert len({r["sha256"] for r in rows})==1000
+          for r in rows:
+              p=Path(r["artifact_path"])
+              assert p.is_file(), r["artifact_path"]
+              assert hashlib.sha256(p.read_bytes()).hexdigest()==r["sha256"], r["harvest_id"]
+          print("VERIFIED 1000 source files; all hashes and paths match.")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strategy-source-harvest-1000
+          path: source-harvest/
+          if-no-files-found: error
+          retention-days: 90
