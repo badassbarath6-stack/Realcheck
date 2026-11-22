@@ -216,3 +216,21 @@ GitHub connector access is active again. The full 109-candidate repository regis
 - Do not issue an implementation/backtest handoff prompt or begin the final import gate until the remaining mechanism audit is completed and the 100-mechanism threshold is genuinely met (or the user explicitly changes that threshold).
 
 The register includes source-level spot-check reconciliation for Wickline, the Bollinger/Keltner squeeze bot, Lumibot's BTC/ETH spot rebalancer, the funding-carry app, liquidation maker filtering, PCA residual stat-arb, the perp RL dissertation, funding-arbitrage ML and post-liquidation exhaustion research.
+
+
+## 50-mechanism pilot authorization — 2026-11-22
+
+The research owner has authorized a first pilot on the current 50 accepted/conditional mechanism register without waiting for the 100-mechanism audit gate. This authorization supersedes the earlier 100-mechanism gate for pilot planning and implementation only; it does not promote conditional mechanisms to verified engines and does not waive source-fidelity or data requirements.
+
+### Backtest acceptance standard
+- Scope: BTCUSDT and ETHUSDT Binance USD-M perpetuals; five complete years, with UTC calendar-year reporting and explicit partial-year labels if the chosen five-year window does not align to calendar boundaries.
+- Each mechanism must use its own native timeframe, entry/exit/state logic, and required data. Do not force order-book, liquidation-flow, market-making, cross-venue, dated-basis, or carry mechanisms through a candle-only adapter.
+- Costs: per-side trading fees and slippage, funding cashflows at actual settlement times, and realistic liquidation/margin rules where relevant. Report baseline and adverse-cost stress.
+- Walk-forward: chronological train/validation/test; no full-sample parameter selection; prefix-invariance/no-lookahead checks; record data coverage and missingness.
+- Required metrics by engine, symbol, and UTC calendar year: trades, wins/losses, win rate, gross/net PF, gross/net PnL, expectancy per trade, average win/loss, max drawdown, exposure/time-in-market, turnover, fees, funding PnL, slippage, liquidation count, and data coverage. Also provide aggregate five-year OOS metrics and sample-size/confidence caveats.
+- A mechanism that lacks its required historical inputs is marked NOT TESTABLE for that period, not assigned invented or proxy performance.
+
+### Current execution readiness — not yet run
+The existing run_walk_forward.py only exposes three strategies (funding_mr, taker_momentum, oi_divergence). The current registry contains a limited subset of imported candle and specialist modules; it is not a 50-engine runner. Existing status documentation also confirms that M1 preparation currently lacks several required fields (OI, taker long/short ratio, spot prices, L1/L2 depth, queue/fill data, dated-futures marks/expiry, and liquidation-event feeds). Market-making, carry, cross-venue, lead-lag and post-liquidation engines require separate event/portfolio adapters.
+
+Therefore this authorization is not evidence that the five-year 50-engine backtest has started. Before reporting results, implementation and data ingestion must be extended, and a successful five-year Actions run plus output artifacts must be verified. No PF, trade count, or yearly result may be inferred from source claims or fabricated.
