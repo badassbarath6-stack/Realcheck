@@ -202,3 +202,17 @@ Batch 19 adds three distinct conditional mechanisms:
 The social-channel synchronized-pump detector is documented as a distinct event-source signal but excluded from the strict futures-native count pending perp-specific validation. HyperData, futures-app, NOFX and RL clones are deduplicated; grid, pair stat-arb, carry, breakout, momentum, MM and technical signal variants remain within their existing families.
 
 Cumulative accepted/conditional unique mechanism count: **50 of 100**. The 109-repository candidate audit is complete at repository disposition level; source evidence gaps are explicit per row. No code copied/imported. No historical Realcheck BTC/ETH backtest started.
+
+
+## Reconnected audit status — 2026-11-22
+
+GitHub connector access is active again. The full 109-candidate repository register is stored at [AUDIT_REGISTER_109.md](AUDIT_REGISTER_109.md) and contains exactly 109 numbered rows.
+
+- 109/109 candidate repositories have individual repository-level dispositions.
+- Current register evidence tally: 19 rows with source-code evidence, 79 documentation-only rows, and 10 unavailable/empty/redacted rows. Some CODE rows also include documentation evidence.
+- 50/100 distinct mechanisms have passed or conditionally passed the cumulative mechanism review. The 100-distinct-mechanism goal is **not complete**.
+- The 109-repository catalogue is a discovery universe, not 109 validated engines. Duplicate repositories, frameworks, overlays, spot-only systems, unavailable source and documentation-only candidates are not counted as independently source-verified engines.
+- No BTC/ETH five-year Realcheck backtest has been started or verified.
+- Do not issue an implementation/backtest handoff prompt or begin the final import gate until the remaining mechanism audit is completed and the 100-mechanism threshold is genuinely met (or the user explicitly changes that threshold).
+
+The register includes source-level spot-check reconciliation for Wickline, the Bollinger/Keltner squeeze bot, Lumibot's BTC/ETH spot rebalancer, the funding-carry app, liquidation maker filtering, PCA residual stat-arb, the perp RL dissertation, funding-arbitrage ML and post-liquidation exhaustion research.
