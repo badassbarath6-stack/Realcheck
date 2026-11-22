@@ -24,3 +24,10 @@ The cross-venue OU project was excluded pending correction of a rolling-median b
 | Correlation-break recovery | https://github.com/stooq1/strategy-graveyard/blob/main/trading_analyzer/detectors/satellite.py | specialist_signal_engines.correlation_break_recovery |
 
 These four ports are clean-room or MIT-attributed reimplementations. L2 and paired-stream signals remain isolated from the OHLCV-only candle runner.
+
+
+| Mechanism | Source implementation | Port |
+|---|---|---|
+| Volume-clock VPIN toxicity percentile regime switch (conditional) | https://github.com/djienne/VPIN_PYTHON_CRYPTO/blob/main/vpin_calculator.py and https://github.com/djienne/VPIN_PYTHON_CRYPTO/blob/main/vpin_backtest.py | Not imported; clean-room futures-specific port required after point-in-time perpetual taker-flow data validation |
+
+The inspected upstream repository has no declared licence. Its Binance spot 1m history failed its requested 2020–2026 coverage check; its manifest reports zero completed grid and Optuna trials. It is not treated as a validated profitability result or as an already tested BTC/ETH perpetual strategy.
