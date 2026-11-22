@@ -188,3 +188,17 @@ See [AUDIT_BATCH_17.md](AUDIT_BATCH_17.md). Batch 17 inspected five additional c
 ## Source audit — Batch 18
 
 See [AUDIT_BATCH_18.md](AUDIT_BATCH_18.md). Batch 18 deeply inspected the Nikhilperr Binance Futures bot's README, signal generator, main loop, trade manager and learning module. Its four claimed strategies (EMA/MACD/ADX trend, RSI/Bollinger/VWAP mean reversion, volume/OBV breakout, and funding/OI fade) are duplicates of already counted mechanism families; hourly signal-weight learning is an adaptation overlay, not a new alpha engine. Twelve further catalogue candidates were queried, but relevant indexed source excerpts were unavailable; they remain unassessed, not rejected. No code copied. Cumulative accepted/conditional distinct mechanism count remains **47 of 100**; 53 remain. No historical Realcheck backtest has started.
+
+
+## Complete 109-repository audit — Batch 19
+
+See [AUDIT_BATCH_19.md](AUDIT_BATCH_19.md) and the full [109-row audit register](AUDIT_REGISTER_109.md). Every one of the 109 catalogue candidates now has an individual repository-level disposition, mechanism-family mapping and evidence grade. The register distinguishes source-inspected code from documentation-only, framework/metadata, unavailable and redacted candidates; it does not falsely treat every README claim as verified source code.
+
+Batch 19 adds three distinct conditional mechanisms:
+1. Cross-asset delayed-beta / leader–laggard momentum (BTC impulse followed by a lagging target asset; source implementation BTC→SOL).
+2. Cross-sectional PCA factor-residual mean reversion (eigenportfolio factor removal, OU residual s-scores and lagged turnover-costed positions; crypto-perp evidence decays and needs broad-universe replication).
+3. Exact post-liquidation-flow exhaustion reversion (wait for liquidation intensity and order-flow exhaustion before fading toward the pre-cascade anchor; profitable hindsight trigger requires exact liquidation data, while the source reports realistic live entries lose).
+
+The social-channel synchronized-pump detector is documented as a distinct event-source signal but excluded from the strict futures-native count pending perp-specific validation. HyperData, futures-app, NOFX and RL clones are deduplicated; grid, pair stat-arb, carry, breakout, momentum, MM and technical signal variants remain within their existing families.
+
+Cumulative accepted/conditional unique mechanism count: **50 of 100**. The 109-repository candidate audit is complete at repository disposition level; source evidence gaps are explicit per row. No code copied/imported. No historical Realcheck BTC/ETH backtest started.
