@@ -159,3 +159,8 @@ See [AUDIT_BATCH_13.md](AUDIT_BATCH_13.md). Batch 13 adds two conditional mechan
 ## Source audit — Batch 14
 
 See [AUDIT_BATCH_14.md](AUDIT_BATCH_14.md). Batch 14 adds one conditional model family: a dual-axis cross-sectional temporal-attention transformer with a monotonic quantile head, trained on causal normalized OHLCV panels and translated into dollar-neutral, risk-equalized long/short weights. The upstream README reports IC around 0.025 but explicitly says 5 bps taker friction compresses it near breakeven; no weights or code were copied because the repository has no declared licence. It requires a full multi-asset model pipeline and is not suitable for the candle-only runner. Cumulative accepted/conditional source-review count: 45 of 100; 55 remain. No historical Realcheck backtest has started.
+
+
+## Source audit — Batch 15
+
+See [AUDIT_BATCH_15.md](AUDIT_BATCH_15.md). Batch 15 adds one conditional mechanism: volume-clock VPIN toxicity-percentile regime switching. The inspected Binance implementation uses adaptive volume buckets, a lagged historical CDF excluding the current bucket, and next-open long/cash execution with fees, slippage and a two-day cooldown. It is not promoted to BTC/ETH perpetual testing yet: the upstream run manifest records 2,347 missing 1m candles across 15 intervals in its requested 2020–2026 spot history, with zero completed parameter trials, and the implementation is spot rather than perpetual-specific. No code copied. Cumulative accepted/conditional source-review count: 46 of 100; 54 remain. No historical Realcheck backtest has started.
