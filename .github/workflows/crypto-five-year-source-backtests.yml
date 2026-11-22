@@ -24,7 +24,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download 45023349418 --repo badassbarath6-stack/Realcheck --name strategy-source-harvest-1000 --dir .
+          mkdir -p /tmp/harvest-download source-harvest
+          gh run download 45023349418 --repo badassbarath6-stack/Realcheck --name strategy-source-harvest-1000 --dir /tmp/harvest-download
+          cp -a /tmp/harvest-download/. source-harvest/
           test "$(find source-harvest/sources -type f | wc -l)" -eq 1000
           test -f source-harvest/manifest.csv
       - name: Install native Freqtrade runtime
