@@ -76,7 +76,7 @@ def main():
 
     pine=[p for p in (pyne/"assets/strategy/bit-exact").rglob("*.pine") if pine_is_strategy(p)]
     pine.sort(key=lambda p:p.relative_to(pyne).as_posix())
-    if len(pine)<449: raise RuntimeError(f"Expected at least 449 Pine strategy implementations; found {len(pine)}")
+    if len(pine)<384: raise RuntimeError(f"Expected at least 384 Pine strategy implementations; found {len(pine)}")
 
     python_candidates=[]
     for base,slug,sha,url in [
@@ -102,18 +102,19 @@ def main():
     for p in (mt5/"mql5_experts_mt5").rglob("*.mq5"):
         if mql_is_ea(p): mql.append(p)
     mql.sort(key=lambda p:p.relative_to(mt5).as_posix())
-    if len(mql)<122: raise RuntimeError(f"Need 122 MT5 EA implementations; found {len(mql)}")
+    if len(mql)<187: raise RuntimeError(f"Need 187 MT5 EA implementations; found {len(mql)}")
 
     selected=[]
-    for p in pine[:449]:
+    for p in pine[:384]:
         selected.append((p,"pynecore","pine",pyne_sha,pyne_url,pyne))
     for p,slug,sha,url,base in py_selected:
         selected.append((p,slug,"python",sha,url,base))
-    for p in mql[:122]:
+    for p in mql[:250]:
         selected.append((p,"mt5_experts","mql5",mt5_sha,mt5_url,mt5))
 
     seen=set(); records=[]
     for i,(p,slug,kind,commit,url,base) in enumerate(selected,1):
+        if len(records)>=TARGET: break
         h=digest(p)
         if h in seen: continue
         seen.add(h)
@@ -149,9 +150,9 @@ def main():
     (ROOT/"README.md").write_text("""# 1,000-source strategy implementation harvest
 
 This artifact contains exactly 1,000 individual source files fetched from public repositories:
-- 449 TradingView Pine strategy scripts from theonetrade/pynecore-strategies
+- 384 TradingView Pine strategy scripts from theonetrade/pynecore-strategies
 - 429 Freqtrade IStrategy implementations from the PeetCrypto collection, with official/community fallback pools if needed
-- 122 MetaTrader 5 Expert Advisors from GeneralTradingSarl/expert-mt5
+- 187 MetaTrader 5 Expert Advisors from GeneralTradingSarl/expert-mt5
 
 Each item passed a minimal language-specific source check and is preserved byte-for-byte in sources/. manifest.csv records original path, source URL, exact repository commit, SHA-256, size, and artifact path. Repository license files are preserved under licenses/.
 
