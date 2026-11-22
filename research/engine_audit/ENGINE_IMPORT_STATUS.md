@@ -164,3 +164,12 @@ See [AUDIT_BATCH_14.md](AUDIT_BATCH_14.md). Batch 14 adds one conditional model 
 ## Source audit — Batch 15
 
 See [AUDIT_BATCH_15.md](AUDIT_BATCH_15.md). Batch 15 adds one conditional mechanism: volume-clock VPIN toxicity-percentile regime switching. The inspected Binance implementation uses adaptive volume buckets, a lagged historical CDF excluding the current bucket, and next-open long/cash execution with fees, slippage and a two-day cooldown. It is not promoted to BTC/ETH perpetual testing yet: the upstream run manifest records 2,347 missing 1m candles across 15 intervals in its requested 2020–2026 spot history, with zero completed parameter trials, and the implementation is spot rather than perpetual-specific. No code copied. Cumulative accepted/conditional source-review count: 46 of 100; 54 remain. No historical Realcheck backtest has started.
+
+
+## Broad crypto-futures source discovery — 2026-11-22
+
+Added [CRYPTO_FUTURES_100_SOURCE_CATALOG.md](CRYPTO_FUTURES_100_SOURCE_CATALOG.md), a discovery scan of **109 unique GitHub repositories** returned by 26 targeted searches spanning perpetual-futures bots, funding/basis, order flow, liquidation, market making, statistical arbitrage, ML/RL, grid, breakout, mean reversion and backtesting. This exceeds the requested 100-source discovery breadth.
+
+Important distinction: 109 is the number of unique candidate repositories catalogued, **not** the number of audited or accepted engines. Candidate repositories can be duplicates, forks, generic bot shells, spot-only implementations, or unverified. They must be source-inspected and deduplicated by mechanism. No source is accepted merely because its search title or README advertises a strategy. The catalogue defines a crypto-perpetual-native eligibility gate: funding cashflows, mark/index, fees/slippage, leverage/margin, liquidation and causal fills as applicable.
+
+The user's instruction is to complete the remaining mechanism audit as one coherent research pass, with no artificial stopping after a handful of sources. The next audit work must use this broad candidate pool and additional academic/data/platform sources, inspect actual source files and retain ACCEPT / CONDITIONAL / REJECT outcomes. It must not label the 54 remaining mechanisms complete until source evidence is recorded. No five-year BTC/ETH backtest is claimed started by this discovery scan.
