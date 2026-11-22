@@ -1,0 +1,51 @@
+name: Five Year Crypto Futures Source Backtests
+on:
+  push:
+    branches:
+      - research/crypto-5y-source-backtests
+    paths:
+      - "research/engine_audit/run_1000_source_five_year.py"
+      - ".github/workflows/crypto-five-year-source-backtests.yml"
+permissions:
+  contents: read
+  actions: read
+jobs:
+  five-year-batch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/crypto-5y-source-backtests
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Retrieve verified 1,000-source harvest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 45023349418 --repo badassbarath6-stack/Realcheck --name strategy-source-harvest-1000 --dir .
+          test "$(find source-harvest/sources -type f | wc -l)" -eq 1000
+          test -f source-harvest/manifest.csv
+      - name: Install native Freqtrade runtime
+        run: |
+          python -m pip install --upgrade pip wheel
+          python -m pip install freqtrade
+          freqtrade --version
+      - name: Download five years of Binance USD-M perpetual futures candles
+        run: |
+          mkdir -p user_data
+          freqtrade download-data --exchange binance --trading-mode futures --pairs BTC/USDT:USDT ETH/USDT:USDT --timeframes 5m 15m 30m 1h 4h --timerange 20211122-20261122 --data-format-ohlcv feather
+      - name: Run source-by-source native strategy backtests
+        run: |
+          python research/engine_audit/run_1000_source_five_year.py
+      - name: Verify and publish results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crypto-five-year-source-backtest-results
+          path: |
+            five-year-results/
+            user_data/backtest_results/
+          if-no-files-found: warn
+          retention-days: 90
