@@ -52,7 +52,7 @@ def main():
         shutil.rmtree(TMP,ignore_errors=True);TMP.mkdir(parents=True)
         shutil.copy2(src,TMP/src.name)
         dest=OUT/f'{r["harvest_id"]}_{cls}'
-        cmd=["freqtrade","backtesting","--config","/tmp/config.json","--strategy-path",str(TMP),
+        cmd=["python","research/engine_audit/offline_freqtrade_cli.py","backtesting","--config","/tmp/config.json","--strategy-path",str(TMP),
              "--strategy",cls,"--timeframe",tf,"--timerange",f"{START}-{END}","--export","trades",
              "--export-filename",str(dest)+".json"]
         started=time.time()
