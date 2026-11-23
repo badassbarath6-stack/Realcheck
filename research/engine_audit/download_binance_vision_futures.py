@@ -11,7 +11,7 @@ import pandas as pd
 
 BASE = "https://data.binance.vision/data/futures/um"
 START = datetime(2021, 11, 22, tzinfo=timezone.utc)
-END_EXCLUSIVE = datetime(2026, 11, 23, tzinfo=timezone.utc)
+END_EXCLUSIVE = datetime(2026, 11, 22, tzinfo=timezone.utc)
 START_MS = int(START.timestamp() * 1000)
 END_MS = int(END_EXCLUSIVE.timestamp() * 1000)
 SYMBOLS = ("BTCUSDT", "ETHUSDT")
@@ -62,7 +62,7 @@ def archive_urls(symbol):
         m += 1
         if m == 13:
             y, m = y + 1, 1
-    for day in range(1, 23):
+    for day in range(1, 22):
         name = f"{symbol}-1m-2026-11-{day:02d}.zip"
         urls.append(f"{BASE}/daily/klines/{symbol}/1m/{name}")
     return urls
@@ -116,7 +116,7 @@ def build_symbol(symbol):
             raise RuntimeError(f"No {tf} bars generated for {symbol}")
         frame = pd.DataFrame(rows, columns=["date", "open", "high", "low", "close", "volume"])
         frame["date"] = pd.to_datetime(frame["date"], unit="ms", utc=True)
-        frame.to_feather(DATA_ROOT / f"{symbol.replace('USDT', '_USDT')}_USDT-{tf}-futures.feather")
+        frame.to_feather(DATA_ROOT / f"{symbol[:-4]}_USDT-{tf}-futures.feather")
         expected = (END_MS - START_MS) // (TIMEFRAMES[tf] * 60_000)
         if len(frame) != expected:
             raise RuntimeError(f"{symbol} {tf}: incomplete source history: expected {expected} complete bars, got {len(frame)}")
