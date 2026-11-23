@@ -32,7 +32,7 @@ def main():
     pine=[r for r in manifest if r["implementation_language"]=="pine"]
     mql=[r for r in manifest if r["implementation_language"]=="mql5"]
     config={"dry_run":True,"strategy":"SampleStrategy","timeframe":"5m","trading_mode":"futures","margin_mode":"isolated",
-      "stake_currency":"USDT","stake_amount":1000,"tradable_balance_ratio":0.99,"max_open_trades":1,
+      "stake_currency":"USDT","stake_amount":1000,"dry_run_wallet":10000,"tradable_balance_ratio":0.99,"max_open_trades":1,
       "exchange":{"name":"binance","key":"","secret":"","ccxt_config":{},"ccxt_async_config":{},"pair_whitelist":PAIRS,"pair_blacklist":[]},
       "pairlists":[{"method":"StaticPairList"}],"dataformat_ohlcv":"feather","dataformat_trades":"feather",
       "fee":0.0005,"unfilledtimeout":{"entry":10,"exit":10,"exit_timeout_count":0,"unit":"minutes"},
