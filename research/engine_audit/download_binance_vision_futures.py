@@ -10,8 +10,8 @@ from pathlib import Path
 import pandas as pd
 
 BASE = "https://data.binance.vision/data/futures/um"
-START = datetime(2021, 11, 22, tzinfo=timezone.utc)
-END_EXCLUSIVE = datetime(2026, 11, 23, tzinfo=timezone.utc)
+START = datetime(2021, 11, 20, tzinfo=timezone.utc)
+END_EXCLUSIVE = datetime(2026, 11, 20, tzinfo=timezone.utc)
 START_MS = int(START.timestamp() * 1000)
 END_MS = int(END_EXCLUSIVE.timestamp() * 1000)
 SYMBOLS = ("BTCUSDT", "ETHUSDT")
@@ -62,7 +62,7 @@ def archive_urls(symbol):
         m += 1
         if m == 13:
             y, m = y + 1, 1
-    for day in range(1, 23):
+    for day in range(1, 20):
         name = f"{symbol}-1m-2026-11-{day:02d}.zip"
         urls.append(f"{BASE}/daily/klines/{symbol}/1m/{name}")
     return urls
@@ -116,9 +116,11 @@ def build_symbol(symbol):
             raise RuntimeError(f"No {tf} bars generated for {symbol}")
         frame = pd.DataFrame(rows, columns=["date", "open", "high", "low", "close", "volume"])
         frame["date"] = pd.to_datetime(frame["date"], unit="ms", utc=True)
-        frame.to_feather(DATA_ROOT / f"{symbol.replace('USDT', '_USDT')}_{'USDT'}-{tf}-futures.feather")
+        frame.to_feather(DATA_ROOT / f"{symbol.replace('USDT', '_USDT')}-{tf}-futures.feather")
         expected = (END_MS - START_MS) // (TIMEFRAMES[tf] * 60_000)
-        print(f"{symbol} {tf}: {len(frame):,} bars (theoretical max {expected:,})", flush=True)
+        if len(frame) != expected:
+            raise RuntimeError(f"{symbol} {tf}: incomplete source history: expected {expected} complete bars, got {len(frame)}")
+        print(f"{symbol} {tf}: {len(frame):,} complete bars verified", flush=True)
     return {tf: len(rows) for tf, rows in bars.items()}
 
 if __name__ == "__main__":
@@ -130,5 +132,5 @@ if __name__ == "__main__":
         "checksum_verified": True,
         "period_utc": {"start_inclusive": START.isoformat(), "end_exclusive": END_EXCLUSIVE.isoformat()},
         "symbols": list(SYMBOLS), "timeframes": summary,
-        "note": "Local data was built from verified archive files; no CCXT/exchange API calls."
+        "note": "Exact five-year window matching the proven Realcheck archive workflow; all expected complete bars required; no CCXT/exchange API calls."
     }, indent=2))
