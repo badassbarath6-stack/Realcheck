@@ -1,4 +1,4 @@
-name: Five Year Crypto Futures Source Backtests
+name: Five Year Crypto Futures Source Backtests # rerun after wallet sizing correction
 on:
   push:
     branches:
