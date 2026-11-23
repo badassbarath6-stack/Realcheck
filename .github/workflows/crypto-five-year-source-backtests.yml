@@ -5,6 +5,8 @@ on:
       - research/crypto-5y-source-backtests
     paths:
       - "research/engine_audit/run_1000_source_five_year.py"
+      - "research/engine_audit/download_binance_vision_futures.py"
+      - "research/engine_audit/offline_freqtrade_cli.py"
       - ".github/workflows/crypto-five-year-source-backtests.yml"
 permissions:
   contents: read
@@ -19,7 +21,7 @@ jobs:
           ref: research/crypto-5y-source-backtests
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - name: Retrieve verified 1,000-source harvest
         env:
           GH_TOKEN: ${{ github.token }}
