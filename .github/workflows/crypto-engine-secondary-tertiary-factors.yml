@@ -1,7 +1,7 @@
 name: Crypto Engine Secondary and Tertiary Factor Search (Frozen SL-RR)
 on:
   push:
-    branches: [research/crypto-engine-secondary-tertiary-factors]
+    branches: [research/crypto-engine-secondary-tertiary-factors, research/crypto-factor-audit-fix]
     paths:
       - "research/crypto_engine_secondary_tertiary_factors.py"
       - ".github/workflows/crypto-engine-secondary-tertiary-factors.yml"
