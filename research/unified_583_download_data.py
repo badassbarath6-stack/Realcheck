@@ -82,6 +82,8 @@ def build(symbol):
         expected=(END_MS-START_MS)//(mins*60_000)
         if len(bars)!=expected:raise RuntimeError(f"{symbol} {tf}: expected {expected} bars, got {len(bars)}")
         bars.reset_index(names="date").to_feather(ROOT/f"{symbol[:-4]}_USDT-{tf}-futures.feather")
+        # Freqtrade futures pair notation BTC/USDT:USDT maps to BTC_USDT_USDT.
+        bars.reset_index(names="date").to_feather(ROOT/f"{symbol[:-4]}_USDT_USDT-{tf}-futures.feather")
         counts[tf]=len(bars);print(f"{symbol} {tf}: {len(bars):,} complete bars",flush=True)
     return counts
 
