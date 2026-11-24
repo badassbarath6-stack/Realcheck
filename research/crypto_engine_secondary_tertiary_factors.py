@@ -268,7 +268,7 @@ def main():
         ("E05","E05_rsi","rsi_confirmation_threshold",[25,30,35,40,45]),
         ("E05","E05_bbperiod","bollinger_lookback_period",[14,18,20,24,30]),
         ("E06","E06_period","rsi_calculation_period",[7,10,14,18,21]),
-        ("E06","E06_confirm","rsi_reversal_confirmation_bars",[1,2,3,4]),
+        ("E06","E06_confirm","threshold_cross_lookback_bars",[1,2,3,4]),
         ("E07","E07_lookback","volume_zscore_lookback",[15,20,30,40,50]),
         ("E07","E07_body","minimum_candle_body_atr",[0,.05,.10,.15,.20]),
         ("E08","E08_range","consolidation_range_lookback",[24,36,48,72,96]),
