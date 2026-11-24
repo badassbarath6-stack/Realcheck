@@ -58,32 +58,102 @@ def ft_run(row, cls, tf):
     if not src.exists(): raise FileNotFoundError(src)
     tmp=Path("/tmp/realcheck-one-strategy"); shutil.rmtree(tmp,ignore_errors=True); tmp.mkdir(parents=True)
     shutil.copy2(src,tmp/src.name)
+
+    # Freqtrade sanitizes BTC/USDT:USDT to BTC_USDT_USDT. The Binance Vision
+    # source files are named BTC_USDT, so create exact local-data aliases.
+    for base in ("BTC","ETH"):
+        source=DATA/f"{base}_USDT-{tf}-futures.feather"
+        target=DATA/f"{base}_USDT_USDT-{tf}-futures.feather"
+        if not source.is_file(): raise FileNotFoundError(source)
+        if not target.exists():
+            try: target.symlink_to(source.resolve())
+            except OSError: shutil.copy2(source,target)
+
+    # GitHub-hosted runner egress is blocked by Binance's regional API policy.
+    # Backtesting uses local, checksum-verified candles only; supply static
+    # Binance USD-M contract metadata and disable exchange REST calls.
+    offline=Path("/tmp/realcheck-ft-offline"); offline.mkdir(parents=True,exist_ok=True)
+    bootstrap=offline/"sitecustomize.py"
+    if not bootstrap.exists():
+        bootstrap.write_text(r'''
+from freqtrade.exchange.exchange import Exchange
+
+def _market(base, amount_step, price_step, quantity_precision, price_precision):
+    symbol = f"{base}/USDT:USDT"
+    return {
+        "id": f"{base}USDT", "symbol": symbol, "base": base, "quote": "USDT",
+        "settle": "USDT", "baseId": base, "quoteId": "USDT", "settleId": "USDT",
+        "type": "swap", "spot": False, "margin": False, "swap": True,
+        "future": False, "option": False, "active": True, "contract": True,
+        "linear": True, "inverse": False, "contractSize": 1.0,
+        "maker": 0.0002, "taker": 0.0005,
+        "precision": {"amount": amount_step, "price": price_step},
+        "limits": {
+            "amount": {"min": amount_step, "max": 1000000.0},
+            "price": {"min": price_step, "max": 1000000000.0},
+            "cost": {"min": 5.0, "max": 1000000000.0},
+            "leverage": {"min": 1.0, "max": 125.0},
+        },
+        "info": {
+            "symbol": f"{base}USDT", "contractType": "PERPETUAL", "status": "TRADING",
+            "baseAsset": base, "quoteAsset": "USDT", "marginAsset": "USDT",
+            "quantityPrecision": quantity_precision, "pricePrecision": price_precision,
+        },
+    }
+
+async def _offline_api_reload_markets(self, reload=False):
+    markets = [
+        _market("BTC", 0.001, 0.1, 3, 1),
+        _market("ETH", 0.01, 0.01, 2, 2),
+    ]
+    self._api_async.set_markets(markets)
+    timeframes = {"1m":"1m", "3m":"3m", "5m":"5m", "15m":"15m",
+                  "30m":"30m", "1h":"1h", "2h":"2h", "4h":"4h", "1d":"1d"}
+    self._api_async.timeframes = timeframes
+    options = dict(getattr(self._api_async, "options", {}) or {})
+    options["defaultType"] = "future"
+    options["timeframes"] = {"swap": timeframes}
+    self._api_async.options = options
+
+def _offline_fill_leverage_tiers(self):
+    self._leverage_tiers = {
+        pair: [{
+            "minNotional": 0.0, "maxNotional": 1000000000.0,
+            "maintenanceMarginRate": 0.004, "maxLeverage": 125.0, "maintAmt": 0.0,
+        }]
+        for pair in ("BTC/USDT:USDT", "ETH/USDT:USDT")
+    }
+
+Exchange._api_reload_markets = _offline_api_reload_markets
+Exchange.check_time_offset = lambda self: None
+Exchange.fill_leverage_tiers = _offline_fill_leverage_tiers
+''')
     cfg=Path("/tmp/realcheck-config.json")
     cfg.write_text(json.dumps({
       "dry_run":True,"strategy":cls,"timeframe":tf,"trading_mode":"futures","margin_mode":"isolated",
       "stake_currency":"USDT","stake_amount":1000,"dry_run_wallet":10000,"tradable_balance_ratio":0.99,
-      "ccxt_config":{"options":{"defaultType":"future"}},
-      "ccxt_async_config":{"options":{"defaultType":"future"}},
-      "max_open_trades":2,"exchange":{"name":"binance","key":"","secret":"","pair_whitelist":["BTC/USDT:USDT","ETH/USDT:USDT"],"pair_blacklist":[]},
+      "max_open_trades":2,"datadir":"user_data/data/binance",
+      "exchange":{"name":"binance","key":"","secret":"","pair_whitelist":["BTC/USDT:USDT","ETH/USDT:USDT"],"pair_blacklist":[]},
       "pairlists":[{"method":"StaticPairList"}],"dataformat_ohlcv":"feather","dataformat_trades":"feather","fee":0.0005,
       "unfilledtimeout":{"entry":10,"exit":10,"exit_timeout_count":0,"unit":"minutes"},
       "order_types":{"entry":"market","exit":"market","stoploss":"market","stoploss_on_exchange":False},
-      "entry_pricing":{"price_side":"other","use_order_book":False,"order_book_top":1},
-      "exit_pricing":{"price_side":"other","use_order_book":False,"order_book_top":1}
+      "entry_pricing":{"price_side":"other","use_order_book":True,"order_book_top":1},
+      "exit_pricing":{"price_side":"other","use_order_book":True,"order_book_top":1}
     }))
     dest=OUT/f"ft_{row['harvest_id']}_{cls}_{tf}.json"
-    env=os.environ.copy(); env["PYTHONPATH"]=str(SRC.resolve())+os.pathsep+env.get("PYTHONPATH","")
+    env=os.environ.copy()
+    env["PYTHONPATH"]=str(offline.resolve())+os.pathsep+str(SRC.resolve())+os.pathsep+env.get("PYTHONPATH","")
     cmd=["freqtrade","backtesting","--config",str(cfg),"--strategy-path",str(tmp),"--strategy",cls,
          "--timeframe",tf,"--timerange",f"{START}-{END}","--export","trades","--export-filename",str(dest)]
     p=subprocess.run(cmd,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=300,env=env)
-    if p.returncode or not dest.exists(): return {"status":"FAILED","detail":p.stdout[-2500:]}
+    if p.returncode or not dest.exists(): return {"status":"FAILED","detail":p.stdout[-3500:]}
     obj=json.loads(dest.read_text()); trades=find_trades(obj)
     vals=[]
     for t in trades:
         v=t.get("profit_abs",t.get("profit_ratio",t.get("profit_pct",0)))
         try: vals.append(float(v))
         except Exception: pass
-    return {"status":"BACKTESTED",**summarize(vals),"detail":p.stdout[-500:]}
+    return {"status":"BACKTESTED",**summarize(vals),"detail":p.stdout[-700:]}
 
 def pine_run(row, tf, symbol):
     url=row.get("source_url","")
@@ -99,7 +169,7 @@ def pine_run(row, tf, symbol):
     candles=[OHLCV(timestamp=int(x.date.timestamp()*1000),open=float(x.open),high=float(x.high),low=float(x.low),close=float(x.close),volume=float(x.volume)) for x in df.itertuples(index=False)]
     si=SymInfo(prefix="BINANCE",ticker=symbol,currency="USDT",basecurrency=symbol.replace("USDT",""),
       description="Binance USD-M perpetual",period=period,type="crypto",mintick=0.01,pricescale=100,minmove=1,
-      pointvalue=1.0,mincontract=0.00001,timezone="UTC",volumetype="base",opening_hours=[],session_starts=[],session_ends=[])
+      pointvalue=1.0,mincontract=(0.001 if symbol=="BTC" else 0.01),timezone="UTC",volumetype="base",opening_hours=[],session_starts=[],session_ends=[])
     runner=ScriptRunner(script_path=script,ohlcv_iter=candles,syminfo=si,inputs={},security_data=None)
     closed=[]
     for item in runner.run_iter():
