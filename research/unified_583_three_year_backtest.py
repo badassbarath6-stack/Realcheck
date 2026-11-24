@@ -62,6 +62,8 @@ def ft_run(row, cls, tf):
     cfg.write_text(json.dumps({
       "dry_run":True,"strategy":cls,"timeframe":tf,"trading_mode":"futures","margin_mode":"isolated",
       "stake_currency":"USDT","stake_amount":1000,"dry_run_wallet":10000,"tradable_balance_ratio":0.99,
+      "ccxt_config":{"options":{"defaultType":"future"}},
+      "ccxt_async_config":{"options":{"defaultType":"future"}},
       "max_open_trades":2,"exchange":{"name":"binance","key":"","secret":"","pair_whitelist":["BTC/USDT:USDT","ETH/USDT:USDT"],"pair_blacklist":[]},
       "pairlists":[{"method":"StaticPairList"}],"dataformat_ohlcv":"feather","dataformat_trades":"feather","fee":0.0005,
       "unfilledtimeout":{"entry":10,"exit":10,"exit_timeout_count":0,"unit":"minutes"},
@@ -97,7 +99,7 @@ def pine_run(row, tf, symbol):
     candles=[OHLCV(timestamp=int(x.date.timestamp()*1000),open=float(x.open),high=float(x.high),low=float(x.low),close=float(x.close),volume=float(x.volume)) for x in df.itertuples(index=False)]
     si=SymInfo(prefix="BINANCE",ticker=symbol,currency="USDT",basecurrency=symbol.replace("USDT",""),
       description="Binance USD-M perpetual",period=period,type="crypto",mintick=0.01,pricescale=100,minmove=1,
-      pointvalue=1.0,timezone="UTC",volumetype="base",opening_hours=[],session_starts=[],session_ends=[])
+      pointvalue=1.0,mincontract=0.00001,timezone="UTC",volumetype="base",opening_hours=[],session_starts=[],session_ends=[])
     runner=ScriptRunner(script_path=script,ohlcv_iter=candles,syminfo=si,inputs={},security_data=None)
     closed=[]
     for item in runner.run_iter():
