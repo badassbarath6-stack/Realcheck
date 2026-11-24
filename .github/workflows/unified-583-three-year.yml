@@ -1,0 +1,154 @@
+name: Unified 583 Engine Three Year Multi-Timeframe Backtest
+on:
+  push:
+    branches: [research/unified-583-three-year]
+    paths:
+      - "research/unified_583_three_year_backtest.py"
+      - "research/unified_583_download_data.py"
+      - ".github/workflows/unified-583-three-year.yml"
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: unified-583-three-year
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/unified-583-three-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install data preparation dependencies
+        run: python -m pip install --upgrade pandas pyarrow
+      - name: Retrieve checksum-verified 1,000-source harvest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p source-harvest
+          gh run download 45023349418 --repo badassbarath6-stack/Realcheck --name strategy-source-harvest-1000 --dir source-harvest
+          test -f source-harvest/manifest.csv
+          test "$(find source-harvest/sources -type f | wc -l)" -eq 1000
+      - name: Build three years of checksum-verified Binance futures candles
+        run: python research/unified_583_download_data.py
+      - name: Verify source and candle manifests
+        run: |
+          python - <<'PY'
+          import csv,json
+          rows=list(csv.DictReader(open("source-harvest/manifest.csv")))
+          assert len(rows)==1000, len(rows)
+          m=json.load(open("three-year-results/data_manifest.json"))
+          assert m["sha256_verified"] is True
+          assert set(m["timeframes"]["BTCUSDT"])=={"5m","15m","30m","1h","4h"}
+          print("Verified 1,000-source harvest and 3-year BTC/ETH MTF data.")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unified-583-three-year-inputs
+          path: |
+            source-harvest/
+            user_data/data/binance/futures/
+            three-year-results/data_manifest.json
+          if-no-files-found: error
+          retention-days: 30
+
+  backtest:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        batch: [0,1,2,3,4,5,6,7,8,9,10,11]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/unified-583-three-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-three-year-inputs
+          path: .
+      - name: Install native Python and Pine runtimes
+        run: |
+          python -m pip install --upgrade pip wheel
+          python -m pip install "freqtrade>=2024.1" "pynesys-pynecore[cli]>=6.12.1" pyarrow
+          freqtrade --version
+      - name: Retrieve pinned PyneCore compiled strategy corpus
+        run: |
+          git clone https://github.com/theonetrade/pynecore-strategies.git pynecore-strategies
+          git -C pynecore-strategies checkout 13f6388d7d95144bb828f8881bede77cf2008ea7
+          test -d pynecore-strategies/scripts
+      - name: Run assigned engines across 5m, 15m, 30m, 1h and 4h
+        run: python research/unified_583_three_year_backtest.py --batch ${{ matrix.batch }} --batches 12
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unified-583-batch-${{ matrix.batch }}
+          path: three-year-results/batch_${{ matrix.batch }}.csv
+          if-no-files-found: warn
+          retention-days: 90
+
+  aggregate:
+    needs: backtest
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/unified-583-three-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: unified-583-batch-*
+          path: collected
+          merge-multiple: true
+      - name: Aggregate PF and entry-count rankings
+        run: |
+          python - <<'PY'
+          import csv,glob,json,os
+          rows=[]
+          for p in glob.glob("collected/*.csv"):
+            with open(p,newline="") as f: rows.extend(csv.DictReader(f))
+          def num(x):
+            try:return float(x)
+            except:return 0.0
+          good=[r for r in rows if r.get("status")=="BACKTESTED"]
+          ranked=[r for r in good if num(r.get("trades"))>=30 and r.get("profit_factor") not in ("", "None", None)]
+          ranked.sort(key=lambda r:(num(r.get("profit_factor")),num(r.get("trades"))),reverse=True)
+          entries=sorted(good,key=lambda r:num(r.get("trades")),reverse=True)
+          os.makedirs("three-year-results",exist_ok=True)
+          def write(name,data):
+            if not data:return
+            keys=sorted({k for x in data for k in x})
+            with open("three-year-results/"+name,"w",newline="") as f:
+              w=csv.DictWriter(f,fieldnames=keys);w.writeheader();w.writerows(data)
+          write("ranked_profit_factor_min_30_trades.csv",ranked)
+          write("ranked_highest_entries.csv",entries)
+          counts={}
+          for r in rows:counts[r.get("status","UNKNOWN")]=counts.get(r.get("status","UNKNOWN"),0)+1
+          summary={"result_rows":len(rows),"backtested_rows":len(good),"distinct_engines_attempted":len(set(r.get("engine_id") for r in rows)),
+                   "status_counts":counts,"ranking_rule":"PF descending, then trade count descending; PF ranking requires >=30 closed trades",
+                   "period_utc":["2023-11-24","2026-11-24"],"timeframes":["5m","15m","30m","1h","4h"],
+                   "symbols":["BTCUSDT","ETHUSDT"],"notes":["Source-native exits/risk settings retained; no common SL/RR override.",
+                   "Pine sources requiring security/lower-timeframe/nonstandard/fundamental context are recorded as not run rather than approximated.",
+                   "MQL5 native-only candidates are outside the 583-engine portable registry."]}
+          json.dump(summary,open("three-year-results/summary.json","w"),indent=2)
+          print(json.dumps(summary,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unified-583-three-year-final-results
+          path: three-year-results/
+          if-no-files-found: warn
+          retention-days: 90
