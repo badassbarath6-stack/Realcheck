@@ -99,6 +99,38 @@ def main():
             duplicate_keys.append(key)
         seen.add(key)
 
+    pine_tick_errors = []
+    python_export_errors = []
+    for row in rows:
+        if row.get("language") == "pine":
+            expected_tick = 0.1 if row.get("symbol") == "BTC" else 0.01 if row.get("symbol") == "ETH" else None
+            actual_tick = number(row.get("tick_size"), -1.0)
+            if expected_tick is None or not math.isclose(actual_tick, expected_tick, rel_tol=0.0, abs_tol=1e-12):
+                pine_tick_errors.append({
+                    "engine_id": row.get("engine_id"), "symbol": row.get("symbol"),
+                    "timeframe": row.get("timeframe"), "tick_size": row.get("tick_size"),
+                    "expected_tick_size": expected_tick
+                })
+        elif row.get("language") == "python" and row.get("status") == "BACKTESTED":
+            export_name = row.get("export_file", "")
+            if (
+                not export_name.startswith("backtest-result-")
+                or not export_name.endswith(".json")
+                or export_name.endswith(".meta.json")
+                or row.get("export_format") != "timestamped_freqtrade_json"
+                or not row.get("export_sha256")
+            ):
+                python_export_errors.append({
+                    "engine_id": row.get("engine_id"), "timeframe": row.get("timeframe"),
+                    "export_file": export_name, "export_format": row.get("export_format")
+                })
+            if int(number(row.get("export_trade_records_validated"), -1)) != int(number(row.get("trades"), -2)):
+                python_export_errors.append({
+                    "engine_id": row.get("engine_id"), "timeframe": row.get("timeframe"),
+                    "trades": row.get("trades"),
+                    "export_trade_records_validated": row.get("export_trade_records_validated")
+                })
+
     status_counts = Counter(row.get("status", "UNKNOWN") for row in rows)
     backtested = [row for row in rows if row.get("status") == "BACKTESTED"]
     closed_trades = sum(int(number(row.get("trades"))) for row in backtested)
@@ -109,7 +141,35 @@ def main():
     for i in range(12):
         samples.extend(read_csv(collected / f"trade_samples_{i:02d}.csv"))
     sample_keys = set()
+    invalid_trade_samples = []
     for sample in samples:
+        if sample.get("language") == "python":
+            if (
+                not sample.get("open_date")
+                or not sample.get("close_date")
+                or sample.get("profit_abs") in ("", None)
+            ):
+                invalid_trade_samples.append({
+                    "engine_id": sample.get("engine_id"),
+                    "timeframe": sample.get("timeframe"),
+                    "open_date": sample.get("open_date"),
+                    "close_date": sample.get("close_date"),
+                    "profit_abs": sample.get("profit_abs")
+                })
+        elif sample.get("language") == "pine":
+            if (
+                sample.get("entry_time_ms") in ("", None)
+                or sample.get("exit_time_ms") in ("", None)
+                or sample.get("profit") in ("", None)
+            ):
+                invalid_trade_samples.append({
+                    "engine_id": sample.get("engine_id"),
+                    "timeframe": sample.get("timeframe"),
+                    "symbol": sample.get("symbol"),
+                    "entry_time_ms": sample.get("entry_time_ms"),
+                    "exit_time_ms": sample.get("exit_time_ms"),
+                    "profit": sample.get("profit")
+                })
         if sample.get("language") == "pine":
             sample_keys.add((sample.get("engine_id"), sample.get("timeframe"), sample.get("symbol")))
         else:
@@ -182,6 +242,9 @@ def main():
         "zero_trade_backtest_rows": zero_trade_rows,
         "trade_sample_rows": len(samples),
         "backtested_rows_missing_trade_samples": len(missing_sample_rows),
+        "pine_tick_size_errors": len(pine_tick_errors),
+        "python_export_audit_errors": len(python_export_errors),
+        "invalid_trade_sample_rows": len(invalid_trade_samples),
         "pf_ranked_rows_min_30_trades": len(pf_ranked),
         "entry_ranked_rows": len(entry_ranked),
         "status_counts": dict(status_counts),
@@ -209,6 +272,9 @@ def main():
         "coverage_errors": coverage_errors[:200],
         "duplicate_result_keys": [list(key) for key in duplicate_keys[:200]],
         "missing_trade_sample_keys": [list(key) for key in missing_sample_rows[:200]],
+        "pine_tick_size_errors": pine_tick_errors[:200],
+        "python_export_audit_errors": python_export_errors[:200],
+        "invalid_trade_samples": invalid_trade_samples[:200],
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (output / "diagnostics.json").write_text(json.dumps(diagnostics, indent=2), encoding="utf-8")
@@ -246,6 +312,12 @@ def main():
         blockers.append("No real closed trades were exported")
     if missing_sample_rows:
         blockers.append(f"Backtested rows with trades but no trade samples: {len(missing_sample_rows)}")
+    if pine_tick_errors:
+        blockers.append(f"Pine tick-size mismatches: {len(pine_tick_errors)}")
+    if python_export_errors:
+        blockers.append(f"Python timestamped Freqtrade export audit errors: {len(python_export_errors)}")
+    if invalid_trade_samples:
+        blockers.append(f"Invalid closed-trade sample records: {len(invalid_trade_samples)}")
     if blockers:
         raise SystemExit("INCOMPLETE OR INVALID BACKTEST: " + "; ".join(blockers))
 
