@@ -109,7 +109,8 @@ def signal_map(d, eth=None, overrides=None):
     squeeze_exp=e.bbwidth<e.bbwidth.rolling(e04_look).quantile(squeeze_q)
     rel_btc=c.pct_change(e09_look)
     ema_fast=c.ewm(span=e10_fast,adjust=False).mean()
-    ema_mid=c.ewm(span=e10_mid,adjust=False).mean()\n    ema_slow=c.ewm(span=e10_slow,adjust=False).mean()
+    ema_mid=c.ewm(span=e10_mid,adjust=False).mean()
+    ema_slow=c.ewm(span=e10_slow,adjust=False).mean()
 
     def confirmed(condition, n):
         n=max(1,int(n))
