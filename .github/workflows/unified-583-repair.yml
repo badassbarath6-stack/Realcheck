@@ -74,33 +74,64 @@ jobs:
           python research/unified_583_repair_backtest.py --engine SRC0399 --timeframe 5m --output-tag smoke_0399
           python research/unified_583_repair_backtest.py --engine SRC0665 --timeframe 5m --output-tag smoke_0665
           python - <<'PY'
-          import csv,glob
+          import csv,glob,hashlib,json,math,zipfile
+          from pathlib import Path
           rows=[]
           for path in glob.glob("three-year-results/batch_smoke_*.csv"):
               with open(path,newline="") as f: rows.extend(csv.DictReader(f))
           assert len(rows)==3, f"Expected 3 smoke rows, got {len(rows)}"
           bad=[r for r in rows if r.get("status")!="BACKTESTED"]
           assert not bad, bad
-          trades=sum(int(float(r.get("trades") or 0)) for r in rows)
-          assert trades>0, "Smoke runs exported no closed trades"
-          bad_exports=[r for r in rows if not (
-              r.get("export_file","").startswith("backtest-result-")
-              and r.get("export_file","").endswith(".json")
-              and not r.get("export_file","").endswith(".meta.json")
-              and r.get("export_format")=="timestamped_freqtrade_json"
-              and r.get("export_sha256")
-              and int(float(r.get("export_trade_records_validated") or -1))==int(float(r.get("trades") or 0))
-          )]
-          assert not bad_exports, f"Smoke rows did not use audited timestamped trade exports: {bad_exports}"
+          trades_total=sum(int(float(r.get("trades") or 0)) for r in rows)
+          assert trades_total>0, "Smoke runs exported no closed trades"
+          bad_exports=[]
+          trade_index={}
+          for r in rows:
+              if not (
+                  r.get("export_file","").startswith("backtest-result-")
+                  and r.get("export_file","").endswith(".json")
+                  and not r.get("export_file","").endswith(".meta.json")
+                  and r.get("export_format")=="timestamped_freqtrade_json"
+                  and r.get("export_sha256")
+                  and r.get("export_container_file","").endswith(".zip")
+                  and r.get("export_container_sha256")
+                  and int(float(r.get("export_trade_records_validated") or -1))==int(float(r.get("trades") or 0))
+              ):
+                  bad_exports.append(r)
+                  continue
+              json_path=Path("three-year-results")/r["export_artifact_path"]
+              zip_path=Path("three-year-results")/r["export_archive_artifact_path"]
+              assert json_path.is_file(), f"Missing retained JSON export: {json_path}"
+              assert zip_path.is_file(), f"Missing original Freqtrade ZIP: {zip_path}"
+              raw=json_path.read_bytes()
+              assert hashlib.sha256(raw).hexdigest()==r["export_sha256"], f"JSON SHA mismatch: {json_path}"
+              assert hashlib.sha256(zip_path.read_bytes()).hexdigest()==r["export_container_sha256"], f"ZIP SHA mismatch: {zip_path}"
+              with zipfile.ZipFile(zip_path) as archive:
+                  assert r["export_file"] in archive.namelist(), f"JSON member missing from {zip_path}"
+                  assert archive.read(r["export_file"])==raw, f"Retained JSON differs from ZIP member: {json_path}"
+              payload=json.loads(raw.decode("utf-8"))["strategy"][r["class"]]["trades"]
+              assert len(payload)==int(float(r["trades"])), f"Export trade count mismatch: {r['engine_id']}"
+              assert len(payload)==int(float(r["export_trade_records_validated"])), f"Validated trade count mismatch: {r['engine_id']}"
+              assert all(
+                  t.get("open_date") and t.get("close_date") and not t.get("is_open",False)
+                  and math.isfinite(float(t["profit_abs"])) for t in payload
+              ), f"Invalid closed trade in JSON export: {r['engine_id']}"
+              trade_index[(r["engine_id"],r["timeframe"])]=payload
+          assert not bad_exports, f"Smoke rows lack audited timestamped JSON/ZIP exports: {bad_exports}"
           samples=[]
           for path in glob.glob("three-year-results/trade_samples_smoke_*.csv"):
               with open(path,newline="") as f: samples.extend(csv.DictReader(f))
           assert samples, "Closed trades were not sampled from the exported JSON"
-          assert all(
-              s.get("open_date") and s.get("close_date") and s.get("profit_abs") not in ("",None)
-              for s in samples
-          ), "Trade sample lacks actual open_date/close_date/profit_abs fields"
-          print({"smoke_rows":len(rows),"closed_trades_from_exported_json":trades,"sample_rows":len(samples),"exports":{r["engine_id"]:r["export_file"] for r in rows}})
+          for s in samples:
+              assert s.get("open_date") and s.get("close_date") and s.get("profit_abs") not in ("",None), s
+              assert math.isfinite(float(s["profit_abs"])), s
+              source=trade_index[(s["engine_id"],s["timeframe"])]
+              assert any(
+                  t.get("open_date")==s["open_date"] and t.get("close_date")==s["close_date"]
+                  and math.isclose(float(t["profit_abs"]),float(s["profit_abs"]),rel_tol=1e-12,abs_tol=1e-12)
+                  for t in source
+              ), f"Sample is not present in source JSON: {s}"
+          print({"smoke_rows":len(rows),"closed_trades_from_exported_json":trades_total,"sample_rows":len(samples),"exports":{r["engine_id"]:r["export_file"] for r in rows}})
           PY
       - uses: actions/upload-artifact@v4
         if: always()
@@ -109,6 +140,7 @@ jobs:
           path: |
             three-year-results/batch_smoke_*.csv
             three-year-results/trade_samples_smoke_*.csv
+            three-year-results/freqtrade_exports/**
           if-no-files-found: warn
           retention-days: 30
 
@@ -151,6 +183,7 @@ jobs:
           path: |
             three-year-results/batch_*.csv
             three-year-results/trade_samples_*.csv
+            three-year-results/freqtrade_exports/**
           if-no-files-found: warn
           retention-days: 90
 
