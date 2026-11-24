@@ -1,6 +1,12 @@
 name: Unified 583 Engine Repair Backtest
 
 on:
+  push:
+    branches: [research/unified-583-three-year]
+    paths:
+      - "research/unified_583_repair_backtest.py"
+      - "research/unified_583_repair_aggregate.py"
+      - ".github/workflows/unified-583-repair.yml"
   workflow_dispatch:
 
 permissions:
@@ -77,12 +83,23 @@ jobs:
           assert not bad, bad
           trades=sum(int(float(r.get("trades") or 0)) for r in rows)
           assert trades>0, "Smoke runs exported no closed trades"
-          assert all(r.get("export_file") and not r["export_file"].startswith(".") for r in rows), "Smoke row did not reference a timestamped Freqtrade export"
+          bad_exports=[r for r in rows if not (
+              r.get("export_file","").startswith("backtest-result-")
+              and r.get("export_file","").endswith(".json")
+              and not r.get("export_file","").endswith(".meta.json")
+              and r.get("export_format")=="timestamped_freqtrade_json"
+              and r.get("export_sha256")
+              and int(float(r.get("export_trade_records_validated") or -1))==int(float(r.get("trades") or 0))
+          )]
+          assert not bad_exports, f"Smoke rows did not use audited timestamped trade exports: {bad_exports}"
           samples=[]
           for path in glob.glob("three-year-results/trade_samples_smoke_*.csv"):
               with open(path,newline="") as f: samples.extend(csv.DictReader(f))
           assert samples, "Closed trades were not sampled from the exported JSON"
-          assert all(s.get("entry_time") and s.get("exit_time") and s.get("profit") not in ("",None) for s in samples), "Trade sample lacks actual open/close/profit fields"
+          assert all(
+              s.get("open_date") and s.get("close_date") and s.get("profit_abs") not in ("",None)
+              for s in samples
+          ), "Trade sample lacks actual open_date/close_date/profit_abs fields"
           print({"smoke_rows":len(rows),"closed_trades_from_exported_json":trades,"sample_rows":len(samples),"exports":{r["engine_id"]:r["export_file"] for r in rows}})
           PY
       - uses: actions/upload-artifact@v4
