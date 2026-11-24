@@ -1,0 +1,33 @@
+name: Crypto Primary Factors SL Buffer and RR Grid
+on:
+  push:
+    branches: [research/crypto-primary-slbuffer-rr]
+    paths:
+      - "research/crypto_primary_slbuffer_rr.py"
+      - ".github/workflows/crypto-primary-slbuffer-rr.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sl-buffer-rr-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install --upgrade pandas numpy requests
+      - name: Compile runner
+        run: python -m py_compile research/crypto_primary_slbuffer_rr.py
+      - name: Run SL buffer and RR grid
+        run: python research/crypto_primary_slbuffer_rr.py
+      - name: Upload research outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crypto-primary-slbuffer-rr-results
+          path: crypto-engine-factor-tuning-results/
+          if-no-files-found: error
+          retention-days: 90
