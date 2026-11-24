@@ -21,7 +21,7 @@ def expand(spec):
             a,b=map(int,x.split("-")); out.update(range(a,b+1))
         else: out.add(int(x))
     return out
-SELECTED={f"SRC{x:04d}" for x in expand(PY_RANGES+" ,"+PINE_RANGES)}
+SELECTED={f"SRC{x:04d}" for x in expand(PY_RANGES+","+PINE_RANGES)}
 
 def pf(values):
     wins=sum(x for x in values if x>0); losses=abs(sum(x for x in values if x<0))
