@@ -160,9 +160,11 @@ def signal_map(d, eth=None, overrides=None):
         long09=confirmed(spread>spread_th,e09_persist)&(rel_btc>0)
         short09=confirmed(spread<-spread_th,e09_persist)&(rel_btc<0)
         sig09=pd.Series(np.select([long09,short09],[1,-1],0),index=d.index)
-    # E10: ADX threshold is fixed at the stage-1 selected value; tune fast/slow EMAs.
-    sig10_long=(e.adx>adx_th)&(ema_fast>ema_slow)
-    sig10_short=(e.adx>adx_th)&(ema_fast<ema_slow)
+    # E10: preserve the original three-EMA directional regime. All three
+    # selected EMA periods must participate; the prior pass accidentally
+    # ignored E10_mid, making that factor dimension inert.
+    sig10_long=(e.adx>adx_th)&(ema_fast>ema_mid)&(ema_mid>ema_slow)
+    sig10_short=(e.adx>adx_th)&(ema_fast<ema_mid)&(ema_mid<ema_slow)
     sig={
         "E01 Donchian breakout":pd.Series(np.select([long01,short01],[1,-1],0),index=d.index),
         "E02 Supertrend ATR":pd.Series(np.select([sig02_long,sig02_short],[1,-1],0),index=d.index),
@@ -401,7 +403,7 @@ def main():
         "same_bar_policy":"SL wins if SL and TP both touched",
         "funding":"NOT INCLUDED",
         "caveat":"The 2024-2026 holdout period was previously inspected in aggregate during the earlier primary-factor experiment. It is not a pristine unseen test now; factor selection in this stage uses development data only. A later fresh paper-trading/forward period is required.",
-        "note":"All prior per-engine/per-symbol SL ATR and RR values are frozen unchanged. This run tunes secondary and tertiary signal/indicator factors only."}
+        "audit_correction":"E10 now uses the full fast/middle/slow EMA ordering. The previous pass calculated E10_mid but did not use it; previous E10 middle-period selection and combined results are invalid and must be superseded.","note":"All prior per-engine/per-symbol SL ATR and RR values are frozen unchanged. This run tunes secondary and tertiary signal/indicator factors only."}
     (OUT/"manifest.json").write_text(json.dumps(manifest,indent=2))
     print("SECONDARY / TERTIARY FACTOR SELECTIONS")
     print(pd.DataFrame(selected_rows).to_string(index=False))
