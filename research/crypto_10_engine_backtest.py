@@ -83,7 +83,7 @@ def signal_map(d, eth=None):
     sig["E08 Volatility expansion"]=pd.Series(np.select([(range_pct<range_pct.rolling(200).quantile(.2))&(e.atr/e.atr.rolling(50).mean()>1.25)&(c>e.ema50),(range_pct<range_pct.rolling(200).quantile(.2))&(e.atr/e.atr.rolling(50).mean()>1.25)&(c<e.ema50)],[1,-1],0),index=d.index)
     # Cross-asset relative strength: trade BTC direction from BTC-vs-ETH 72h return spread.
     if eth is not None:
-        spread=e.ret72-eth.ret72.reindex(e.index)
+        spread=e.ret72-eth.reindex(e.index)
         sig["E09 BTC-ETH relative momentum"]=pd.Series(np.select([(spread>.015)&(e.ret72>0),(spread<-.015)&(e.ret72<0)],[1,-1],0),index=d.index)
     else:
         sig["E09 BTC-ETH relative momentum"]=pd.Series(0,index=d.index)
