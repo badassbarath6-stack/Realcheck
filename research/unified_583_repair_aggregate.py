@@ -104,6 +104,7 @@ def main():
     pine_tick_errors = []
     python_export_errors = []
     python_export_trade_records = {}
+    verified_python_export_rows = set()
     for row in rows:
         if row.get("language") == "pine":
             expected_tick = 0.1 if row.get("symbol") == "BTC" else 0.01 if row.get("symbol") == "ETH" else None
@@ -210,6 +211,8 @@ def main():
                     "export_file": export_name,
                     "export_sha256": row.get("export_sha256"),
                 })
+            else:
+                verified_python_export_rows.add((row.get("engine_id"), row.get("timeframe")))
 
     status_counts = Counter(row.get("status", "UNKNOWN") for row in rows)
     backtested = [row for row in rows if row.get("status") == "BACKTESTED"]
@@ -357,10 +360,9 @@ def main():
         "python_export_audit_errors": len(python_export_errors),
         "invalid_trade_sample_rows": len(invalid_trade_samples),
         "python_sample_export_mismatches": len(python_sample_mismatches),
-        "python_timestamped_json_exports_verified": sum(
-            row.get("language") == "python" and row.get("status") == "BACKTESTED"
-            and (row.get("engine_id"), row.get("timeframe")) in python_export_trade_records
-            for row in rows
+        "python_timestamped_json_exports_verified": len(verified_python_export_rows),
+        "python_exported_closed_trades": sum(
+            len(records) for records in python_export_trade_records.values()
         ),
         "pf_ranked_rows_min_30_trades": len(pf_ranked),
         "entry_ranked_rows": len(entry_ranked),
@@ -428,6 +430,8 @@ def main():
         blockers.append(f"Duplicate result keys: {len(duplicate_keys)}")
     if closed_trades <= 0:
         blockers.append("No real closed trades were exported")
+    if not verified_python_export_rows or sum(len(x) for x in python_export_trade_records.values()) <= 0:
+        blockers.append("No valid closed trades were verified from timestamped Freqtrade JSON exports")
     if missing_sample_rows:
         blockers.append(f"Backtested rows with trades but no trade samples: {len(missing_sample_rows)}")
     if pine_tick_errors:
