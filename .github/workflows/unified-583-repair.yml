@@ -1,0 +1,169 @@
+name: Unified 583 Engine Repair Backtest
+
+on:
+  push:
+    branches: [research/unified-583-three-year]
+    paths:
+      - "research/unified_583_repair_backtest.py"
+      - "research/unified_583_repair_aggregate.py"
+      - ".github/workflows/unified-583-repair.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: unified-583-repair
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/unified-583-three-year
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-three-year-inputs
+          run-id: 45358233591
+          github-token: ${{ github.token }}
+          repository: badassbarath6-stack/Realcheck
+          path: .
+      - name: Verify reused source and candle inputs
+        run: |
+          test -f source-harvest/manifest.csv
+          test "$(find source-harvest/sources -type f | wc -l)" -eq 1000
+          test -f user_data/data/binance/futures/BTC_USDT-5m-futures.feather
+          test -f user_data/data/binance/futures/ETH_USDT-4h-futures.feather
+          echo "Reused the verified input artifact from run 45358233591; no Binance API access or candle re-download is required."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unified-583-repair-inputs
+          path: |
+            source-harvest/
+            user_data/data/binance/futures/
+          if-no-files-found: error
+          retention-days: 30
+
+  smoke:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/unified-583-three-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-repair-inputs
+          path: .
+      - name: Install Freqtrade and compatibility dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          python -m pip install "freqtrade>=2024.1" pyarrow arrow ta
+          freqtrade --version
+      - name: Smoke-test current, legacy and parameter-heavy Freqtrade strategies
+        run: |
+          python research/unified_583_repair_backtest.py --engine SRC0789 --timeframe 5m --output-tag smoke_0789
+          python research/unified_583_repair_backtest.py --engine SRC0399 --timeframe 5m --output-tag smoke_0399
+          python research/unified_583_repair_backtest.py --engine SRC0665 --timeframe 5m --output-tag smoke_0665
+          python - <<'PY'
+          import csv,glob
+          rows=[]
+          for path in glob.glob("three-year-results/batch_smoke_*.csv"):
+              with open(path,newline="") as f: rows.extend(csv.DictReader(f))
+          assert len(rows)==3, f"Expected 3 smoke rows, got {len(rows)}"
+          bad=[r for r in rows if r.get("status")!="BACKTESTED"]
+          assert not bad, bad
+          trades=sum(int(float(r.get("trades") or 0)) for r in rows)
+          assert trades>0, "Smoke runs exported no closed trades"
+          print({"smoke_rows":len(rows),"closed_trades":trades,"statuses":{r["engine_id"]:r["status"] for r in rows}})
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unified-583-repair-smoke
+          path: |
+            three-year-results/batch_smoke_*.csv
+            three-year-results/trade_samples_smoke_*.csv
+          if-no-files-found: warn
+          retention-days: 30
+
+  backtest:
+    needs: [prepare, smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        batch: [0,1,2,3,4,5,6,7,8,9,10,11]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/unified-583-three-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-repair-inputs
+          path: .
+      - name: Install Freqtrade, PyneCore and compatibility dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          python -m pip install "freqtrade>=2024.1" "pynesys-pynecore[cli]>=6.12.1" pyarrow arrow ta
+          freqtrade --version
+      - name: Retrieve pinned PyneCore compiled strategy corpus
+        run: |
+          git clone https://github.com/theonetrade/pynecore-strategies.git pynecore-strategies
+          git -C pynecore-strategies checkout 13f6388d7d95144bb828f8881bede77cf2008ea7
+          test -d pynecore-strategies/scripts
+      - name: Run assigned engines across 5m, 15m, 30m, 1h and 4h
+        run: python research/unified_583_repair_backtest.py --batch ${{ matrix.batch }} --batches 12
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unified-583-repair-batch-${{ matrix.batch }}
+          path: |
+            three-year-results/batch_*.csv
+            three-year-results/trade_samples_*.csv
+          if-no-files-found: warn
+          retention-days: 90
+
+  aggregate:
+    needs: backtest
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/unified-583-three-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-repair-inputs
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: unified-583-repair-batch-*
+          path: collected
+          merge-multiple: true
+      - name: Validate all 12 batches, all engine IDs, closed trades and rankings
+        run: |
+          python research/unified_583_repair_aggregate.py --collected collected --output three-year-results --input-manifest source-harvest/manifest.csv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unified-583-repair-final-results
+          path: three-year-results/
+          if-no-files-found: warn
+          retention-days: 90
