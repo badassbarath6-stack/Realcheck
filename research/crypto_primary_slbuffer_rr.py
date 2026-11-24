@@ -352,3 +352,7 @@ def main():
     print(json.dumps({"configurations":config_count,"selected":sel.to_dict(orient="records")},indent=2,default=str))
 
 # Trigger workflow after workflow definition is present on the default branch.
+
+
+if __name__ == '__main__':
+    main()
