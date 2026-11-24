@@ -4,8 +4,10 @@ import argparse
 import csv
 import json
 import math
+import hashlib
 from collections import Counter, defaultdict
 from pathlib import Path
+from zipfile import BadZipFile, ZipFile
 
 from unified_583_three_year_backtest import SELECTED, TFS
 
@@ -101,6 +103,7 @@ def main():
 
     pine_tick_errors = []
     python_export_errors = []
+    python_export_trade_records = {}
     for row in rows:
         if row.get("language") == "pine":
             expected_tick = 0.1 if row.get("symbol") == "BTC" else 0.01 if row.get("symbol") == "ETH" else None
@@ -112,23 +115,100 @@ def main():
                     "expected_tick_size": expected_tick
                 })
         elif row.get("language") == "python" and row.get("status") == "BACKTESTED":
+            errors = []
             export_name = row.get("export_file", "")
+            archive_name = row.get("export_container_file", "")
+            export_rel = Path(row.get("export_artifact_path", ""))
+            archive_rel = Path(row.get("export_archive_artifact_path", ""))
             if (
                 not export_name.startswith("backtest-result-")
                 or not export_name.endswith(".json")
                 or export_name.endswith(".meta.json")
                 or row.get("export_format") != "timestamped_freqtrade_json"
-                or not row.get("export_sha256")
             ):
+                errors.append("missing/non-trade timestamped JSON member metadata")
+            if not archive_name.startswith("backtest-result-") or not archive_name.endswith(".zip"):
+                errors.append("missing timestamped Freqtrade ZIP container metadata")
+            if (
+                export_rel.is_absolute() or archive_rel.is_absolute()
+                or ".." in export_rel.parts or ".." in archive_rel.parts
+                or not row.get("export_artifact_path")
+                or not row.get("export_archive_artifact_path")
+            ):
+                errors.append("unsafe or missing retained export artifact paths")
+            if export_rel.name != export_name:
+                errors.append("retained JSON artifact path does not match export_file")
+            if archive_rel.name != archive_name:
+                errors.append("retained ZIP artifact path does not match export_container_file")
+            json_path = collected / export_rel
+            zip_path = collected / archive_rel
+            export_bytes = None
+            if not json_path.is_file():
+                errors.append(f"retained timestamped JSON export missing: {export_rel}")
+            else:
+                export_bytes = json_path.read_bytes()
+                actual_sha = hashlib.sha256(export_bytes).hexdigest()
+                if actual_sha != row.get("export_sha256"):
+                    errors.append("retained JSON export SHA-256 mismatch")
+            if not zip_path.is_file():
+                errors.append(f"original Freqtrade ZIP export missing: {archive_rel}")
+            else:
+                actual_zip_sha = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+                if actual_zip_sha != row.get("export_container_sha256"):
+                    errors.append("original Freqtrade ZIP SHA-256 mismatch")
+                try:
+                    with ZipFile(zip_path, "r") as archive:
+                        if export_name not in archive.namelist():
+                            errors.append("timestamped JSON member absent from original ZIP")
+                        elif export_bytes is not None and archive.read(export_name) != export_bytes:
+                            errors.append("retained JSON bytes differ from original ZIP member")
+                except BadZipFile:
+                    errors.append("retained Freqtrade ZIP is corrupt")
+            if export_bytes is not None:
+                try:
+                    export_object = json.loads(export_bytes.decode("utf-8"))
+                    strategy_payload = export_object.get("strategy", {}).get(row.get("class"))
+                    trades = strategy_payload.get("trades") if isinstance(strategy_payload, dict) else None
+                    if not isinstance(trades, list):
+                        errors.append("timestamped JSON lacks selected strategy closed-trades list")
+                    else:
+                        if len(trades) != int(number(row.get("trades"), -1)):
+                            errors.append(
+                                f"JSON closed-trade count {len(trades)} != row trades {row.get('trades')}"
+                            )
+                        if len(trades) != int(number(row.get("export_trade_records_validated"), -1)):
+                            errors.append("JSON closed-trade count != export_trade_records_validated")
+                        valid_records = []
+                        for index, trade in enumerate(trades):
+                            if not isinstance(trade, dict):
+                                errors.append(f"trade {index} is not an object")
+                                continue
+                            if trade.get("is_open") is True:
+                                errors.append(f"trade {index} is still open")
+                            if not trade.get("open_date") or not trade.get("close_date"):
+                                errors.append(f"trade {index} lacks open_date/close_date")
+                            try:
+                                profit_abs = float(trade.get("profit_abs"))
+                                if not math.isfinite(profit_abs):
+                                    raise ValueError("non-finite")
+                            except (TypeError, ValueError):
+                                errors.append(f"trade {index} has missing/non-finite profit_abs")
+                                continue
+                            valid_records.append((
+                                str(trade.get("open_date", "")),
+                                str(trade.get("close_date", "")),
+                                profit_abs,
+                            ))
+                        python_export_trade_records[(row.get("engine_id"), row.get("timeframe"))] = valid_records
+                except (UnicodeDecodeError, json.JSONDecodeError, AttributeError, TypeError) as exc:
+                    errors.append(f"invalid timestamped JSON structure: {exc!r}")
+            if errors:
                 python_export_errors.append({
-                    "engine_id": row.get("engine_id"), "timeframe": row.get("timeframe"),
-                    "export_file": export_name, "export_format": row.get("export_format")
-                })
-            if int(number(row.get("export_trade_records_validated"), -1)) != int(number(row.get("trades"), -2)):
-                python_export_errors.append({
-                    "engine_id": row.get("engine_id"), "timeframe": row.get("timeframe"),
-                    "trades": row.get("trades"),
-                    "export_trade_records_validated": row.get("export_trade_records_validated")
+                    "engine_id": row.get("engine_id"),
+                    "timeframe": row.get("timeframe"),
+                    "errors": "; ".join(errors),
+                    "export_file": export_name,
+                    "export_sha256": row.get("export_sha256"),
                 })
 
     status_counts = Counter(row.get("status", "UNKNOWN") for row in rows)
@@ -148,6 +228,7 @@ def main():
                 not sample.get("open_date")
                 or not sample.get("close_date")
                 or sample.get("profit_abs") in ("", None)
+                or not math.isfinite(number(sample.get("profit_abs"), math.nan))
             ):
                 invalid_trade_samples.append({
                     "engine_id": sample.get("engine_id"),
@@ -161,6 +242,7 @@ def main():
                 sample.get("entry_time_ms") in ("", None)
                 or sample.get("exit_time_ms") in ("", None)
                 or sample.get("profit") in ("", None)
+                or not math.isfinite(number(sample.get("profit"), math.nan))
             ):
                 invalid_trade_samples.append({
                     "engine_id": sample.get("engine_id"),
@@ -174,6 +256,35 @@ def main():
             sample_keys.add((sample.get("engine_id"), sample.get("timeframe"), sample.get("symbol")))
         else:
             sample_keys.add((sample.get("engine_id"), sample.get("timeframe")))
+    python_sample_mismatches = []
+    for sample in samples:
+        if sample.get("language") != "python":
+            continue
+        key = (sample.get("engine_id"), sample.get("timeframe"))
+        actual_records = python_export_trade_records.get(key)
+        if actual_records is None:
+            continue
+        try:
+            sample_profit = float(sample.get("profit_abs"))
+        except (TypeError, ValueError):
+            python_sample_mismatches.append({
+                "engine_id": key[0], "timeframe": key[1], "reason": "sample profit_abs is not numeric"
+            })
+            continue
+        matched = any(
+            open_date == str(sample.get("open_date"))
+            and close_date == str(sample.get("close_date"))
+            and math.isclose(profit_abs, sample_profit, rel_tol=1e-12, abs_tol=1e-12)
+            for open_date, close_date, profit_abs in actual_records
+        )
+        if not matched:
+            python_sample_mismatches.append({
+                "engine_id": key[0], "timeframe": key[1],
+                "open_date": sample.get("open_date"), "close_date": sample.get("close_date"),
+                "profit_abs": sample.get("profit_abs"),
+                "reason": "sample record does not match the retained timestamped JSON export"
+            })
+
     missing_sample_rows = []
     for row in backtested:
         if int(number(row.get("trades"))) <= 0:
@@ -245,6 +356,12 @@ def main():
         "pine_tick_size_errors": len(pine_tick_errors),
         "python_export_audit_errors": len(python_export_errors),
         "invalid_trade_sample_rows": len(invalid_trade_samples),
+        "python_sample_export_mismatches": len(python_sample_mismatches),
+        "python_timestamped_json_exports_verified": sum(
+            row.get("language") == "python" and row.get("status") == "BACKTESTED"
+            and (row.get("engine_id"), row.get("timeframe")) in python_export_trade_records
+            for row in rows
+        ),
         "pf_ranked_rows_min_30_trades": len(pf_ranked),
         "entry_ranked_rows": len(entry_ranked),
         "status_counts": dict(status_counts),
@@ -275,6 +392,7 @@ def main():
         "pine_tick_size_errors": pine_tick_errors[:200],
         "python_export_audit_errors": python_export_errors[:200],
         "invalid_trade_samples": invalid_trade_samples[:200],
+        "python_sample_export_mismatches": python_sample_mismatches[:200],
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (output / "diagnostics.json").write_text(json.dumps(diagnostics, indent=2), encoding="utf-8")
@@ -318,6 +436,8 @@ def main():
         blockers.append(f"Python timestamped Freqtrade export audit errors: {len(python_export_errors)}")
     if invalid_trade_samples:
         blockers.append(f"Invalid closed-trade sample records: {len(invalid_trade_samples)}")
+    if python_sample_mismatches:
+        blockers.append(f"Python sample records do not match timestamped JSON exports: {len(python_sample_mismatches)}")
     if blockers:
         raise SystemExit("INCOMPLETE OR INVALID BACKTEST: " + "; ".join(blockers))
 
