@@ -1,4 +1,5 @@
 name: Unified 583 Engine Three Year Multi-Timeframe Backtest
+# Retry after the latest-archive 404 was fixed; downloader now stops at the latest complete UTC day.
 on:
   push:
     branches: [research/unified-583-three-year]
