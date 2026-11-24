@@ -91,31 +91,42 @@ def signal_map(d, eth=None):
     sig["E10 ADX directional regime"]=pd.Series(np.select([(e.adx>25)&(e.ema20>e.ema50)&(e.ema50>e.ema200),(e.adx>25)&(e.ema20<e.ema50)&(e.ema50<e.ema200)],[1,-1],0),index=d.index)
     return sig
 
-def run_engine(d, sig, name, symbol):
-    side=0; entry=stop=target=0.; entry_i=0; trades=[]
-    # Fixed risk distance 2 ATR, target 3 ATR (1.5R); next-open entry.
+def run_engine(d, sig, name, symbol, sl_atr, rr):
+    # Numpy arrays avoid repeated pandas row construction across the parameter grid.
+    op=d.open.to_numpy(float); hi=d.high.to_numpy(float); lo=d.low.to_numpy(float)
+    cl=d.close.to_numpy(float); atr=d.atr.to_numpy(float)
+    times=d.time.astype(str).to_numpy(); signals=sig.to_numpy(int)
+    side=0; entry=stop=target=0.0; entry_i=0; trades=[]
     for i in range(250,len(d)-1):
-        row=d.iloc[i]; nxt=d.iloc[i+1]
         if side:
-            hit_sl=(row.low<=stop if side==1 else row.high>=stop)
-            hit_tp=(row.high>=target if side==1 else row.low<=target)
+            hit_sl=(lo[i]<=stop if side==1 else hi[i]>=stop)
+            hit_tp=(hi[i]>=target if side==1 else lo[i]<=target)
             if hit_sl or hit_tp:
-                # conservative if both are touched
                 px=stop if hit_sl else target
-                gross=side*(px-entry)/entry
-                costs=2*(FEE+SLIPPAGE)
-                net=gross-costs
-                trades.append(dict(engine=name,symbol=symbol,entry_time=str(d.iloc[entry_i].time),exit_time=str(row.time),side="LONG" if side==1 else "SHORT",entry=entry,exit=px,gross_pct=gross*100,net_pct=net*100,pnl_usd=NOTIONAL*net,exit_reason="SL" if hit_sl else "TP",bars=i-entry_i))
+                gross=side*(px-entry)/entry; net=gross-2*(FEE+SLIPPAGE)
+                trades.append(dict(engine=name,symbol=symbol,sl_atr=sl_atr,rr=rr,
+                    entry_time=times[entry_i],exit_time=times[i],
+                    side="LONG" if side==1 else "SHORT",entry=entry,exit=px,
+                    gross_pct=gross*100,net_pct=net*100,pnl_usd=NOTIONAL*net,
+                    exit_reason="SL" if hit_sl else "TP",bars=i-entry_i))
                 side=0
             elif i-entry_i>=72:
-                px=row.close; gross=side*(px-entry)/entry; net=gross-2*(FEE+SLIPPAGE)
-                trades.append(dict(engine=name,symbol=symbol,entry_time=str(d.iloc[entry_i].time),exit_time=str(row.time),side="LONG" if side==1 else "SHORT",entry=entry,exit=px,gross_pct=gross*100,net_pct=net*100,pnl_usd=NOTIONAL*net,exit_reason="TIME",bars=i-entry_i)); side=0
-        if not side and int(sig.iloc[i])!=0 and pd.notna(row.atr) and row.atr>0:
-            s=int(sig.iloc[i]); entry=float(nxt.open); dist=2*float(row.atr)
-            side=s; entry_i=i+1; stop=entry-s*dist; target=entry+s*3*float(row.atr)
+                px=cl[i]; gross=side*(px-entry)/entry; net=gross-2*(FEE+SLIPPAGE)
+                trades.append(dict(engine=name,symbol=symbol,sl_atr=sl_atr,rr=rr,
+                    entry_time=times[entry_i],exit_time=times[i],
+                    side="LONG" if side==1 else "SHORT",entry=entry,exit=px,
+                    gross_pct=gross*100,net_pct=net*100,pnl_usd=NOTIONAL*net,
+                    exit_reason="TIME",bars=i-entry_i)); side=0
+        if not side and signals[i]!=0 and np.isfinite(atr[i]) and atr[i]>0:
+            s=int(signals[i]); entry=float(op[i+1]); dist=sl_atr*float(atr[i])
+            side=s; entry_i=i+1; stop=entry-s*dist; target=entry+s*dist*rr
     if side:
-        row=d.iloc[-1]; px=float(row.close); gross=side*(px-entry)/entry; net=gross-2*(FEE+SLIPPAGE)
-        trades.append(dict(engine=name,symbol=symbol,entry_time=str(d.iloc[entry_i].time),exit_time=str(row.time),side="LONG" if side==1 else "SHORT",entry=entry,exit=px,gross_pct=gross*100,net_pct=net*100,pnl_usd=NOTIONAL*net,exit_reason="END",bars=len(d)-1-entry_i))
+        i=len(d)-1; px=float(cl[i]); gross=side*(px-entry)/entry; net=gross-2*(FEE+SLIPPAGE)
+        trades.append(dict(engine=name,symbol=symbol,sl_atr=sl_atr,rr=rr,
+            entry_time=times[entry_i],exit_time=times[i],
+            side="LONG" if side==1 else "SHORT",entry=entry,exit=px,
+            gross_pct=gross*100,net_pct=net*100,pnl_usd=NOTIONAL*net,
+            exit_reason="END",bars=i-entry_i))
     return trades
 
 def summarize(t):
@@ -125,26 +136,59 @@ def summarize(t):
 
 def main():
     data={s:indicators(load_symbol(s)) for s in SYMBOLS}
-    alltr=[]; summaries=[]
+    # Broad but bounded grid: stop distance is measured in ATR; target = stop distance x RR.
+    SL_ATR_GRID=[0.8,1.0,1.2,1.5,1.8,2.0,2.5,3.0]
+    RR_GRID=[1.0,1.2,1.5,2.0,2.5,3.0,4.0]
+    alltr=[]
     for s,d in data.items():
         eth=data["ETHUSDT"].ret72 if s=="BTCUSDT" else None
         sigs=signal_map(d,eth)
         for name,sig in sigs.items():
             if name.startswith("E09") and s!="BTCUSDT": continue
-            tr=run_engine(d,sig,name,s); alltr+=tr
+            for sl_atr in SL_ATR_GRID:
+                for rr in RR_GRID:
+                    alltr.extend(run_engine(d,sig,name,s,sl_atr,rr))
     t=pd.DataFrame(alltr)
-    if t.empty: raise RuntimeError("No trades generated by any engine")
-    t.to_csv(OUT/"all_trades.csv",index=False)
-    for (engine,symbol),g in t.groupby(["engine","symbol"]):
-        summaries.append({"engine":engine,"symbol":symbol,**summarize(g)})
-    sm=pd.DataFrame(summaries); sm.to_csv(OUT/"engine_summary.csv",index=False)
-    # year-by-year net outcomes, preserving closed trade exit year
-    t["year"]=pd.to_datetime(t.exit_time,utc=True).dt.year
+    if t.empty: raise RuntimeError("No trades generated by parameter grid")
+    t.to_csv(OUT/"grid_all_trades.csv",index=False)
+    summaries=[]
+    for (engine,symbol,sl_atr,rr),g in t.groupby(["engine","symbol","sl_atr","rr"]):
+        summaries.append({"engine":engine,"symbol":symbol,"sl_atr":sl_atr,"rr":rr,**summarize(g)})
+    sm=pd.DataFrame(summaries).sort_values(["engine","symbol","sl_atr","rr"])
+    sm.to_csv(OUT/"parameter_grid_summary.csv",index=False)
+    # Time-separated evaluation: first two years are development; final year is holdout.
+    t["exit_dt"]=pd.to_datetime(t.exit_time,utc=True)
+    cut=pd.Timestamp("2025-11-01",tz="UTC")
+    hold=t[t.exit_dt>=cut]
+    oos=[]
+    for (engine,symbol,sl_atr,rr),g in hold.groupby(["engine","symbol","sl_atr","rr"]):
+        oos.append({"engine":engine,"symbol":symbol,"sl_atr":sl_atr,"rr":rr,**summarize(g)})
+    oos_df=pd.DataFrame(oos)
+    oos_df.to_csv(OUT/"holdout_year_summary.csv",index=False)
+    # Rank within each engine/symbol on the final-year holdout, not on the full sample.
+    if not oos_df.empty:
+        ranked=oos_df[oos_df.trades>=20].sort_values(
+            ["engine","symbol","profit_factor","net_pnl_usd"],
+            ascending=[True,True,False,False])
+        ranked.groupby(["engine","symbol"],as_index=False,group_keys=False).head(5).to_csv(
+            OUT/"top5_holdout_configs_per_engine_symbol.csv",index=False)
+    t["year"]=t.exit_dt.dt.year
     yearly=[]
-    for (engine,symbol,year),g in t.groupby(["engine","symbol","year"]):
-        yearly.append({"engine":engine,"symbol":symbol,"year":int(year),**summarize(g)})
-    pd.DataFrame(yearly).to_csv(OUT/"yearly_summary.csv",index=False)
-    manifest={"period_utc":[START,END],"symbols":SYMBOLS,"timeframe":"1h","candles":{s:len(d) for s,d in data.items()},"fee_per_side":FEE,"slippage_per_side":SLIPPAGE,"fixed_notional_usd":NOTIONAL,"stop_atr":2,"target_atr":3,"max_holding_bars":72,"entry":"next candle open after closed-bar signal","intrabar_policy":"stop-loss wins when SL and TP both touched","funding":"NOT INCLUDED; results must not be treated as funding-adjusted","engines":10,"trade_count":len(t)}
+    for (engine,symbol,sl_atr,rr,year),g in t.groupby(["engine","symbol","sl_atr","rr","year"]):
+        yearly.append({"engine":engine,"symbol":symbol,"sl_atr":sl_atr,"rr":rr,"year":int(year),**summarize(g)})
+    pd.DataFrame(yearly).to_csv(OUT/"yearly_grid_summary.csv",index=False)
+    manifest={"period_utc":[START,END],"development_period_utc":["2023-11-01","2025-11-01"],
+        "holdout_period_utc":["2025-11-01","2026-11-01"],"symbols":SYMBOLS,"timeframe":"1h",
+        "candles":{s:len(d) for s,d in data.items()},"fee_per_side":FEE,"slippage_per_side":SLIPPAGE,
+        "fixed_notional_usd":NOTIONAL,"sl_atr_grid":SL_ATR_GRID,"rr_grid":RR_GRID,
+        "parameter_combinations_per_engine":len(SL_ATR_GRID)*len(RR_GRID),
+        "max_holding_bars":72,"entry":"next candle open after closed-bar signal",
+        "intrabar_policy":"stop-loss wins when SL and TP both touched",
+        "funding":"NOT INCLUDED; results are not funding-adjusted",
+        "engines":10,"trade_records":len(t),"holdout_ranking_minimum_trades":20,
+        "note":"SL_ATR is the stop distance in ATR units, not a separate swing-structure buffer. RR is target distance divided by stop distance. Final-year holdout is separated from first two years for selection discipline."}
     (OUT/"manifest.json").write_text(json.dumps(manifest,indent=2))
-    print(sm.to_string(index=False)); print(json.dumps(manifest,indent=2))
+    print("GRID SUMMARY ROWS:",len(sm),"TRADE RECORDS:",len(t))
+    print("HOLDOUT ROWS:",len(oos_df))
+    print(manifest)
 if __name__=="__main__": main()
