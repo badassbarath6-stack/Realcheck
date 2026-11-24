@@ -489,6 +489,9 @@ def ft_run(row, strategy_class, timeframe):
     stored_export = export_dir / export_file
     stored_export.write_bytes(export_bytes)
     export_artifact_path = stored_export.relative_to(OUT).as_posix()
+    stored_archive = export_dir / archive_path.name
+    shutil.copy2(archive_path, stored_archive)
+    export_archive_artifact_path = stored_archive.relative_to(OUT).as_posix()
     samples = []
     if trades:
         selected = list(enumerate(trades[:3]))
@@ -515,6 +518,7 @@ def ft_run(row, strategy_class, timeframe):
         "export_container_file": archive_path.name,
         "export_container_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
         "export_artifact_path": export_artifact_path,
+        "export_archive_artifact_path": export_archive_artifact_path,
         "export_trade_records_validated": len(trades),
         "export_sha256": hashlib.sha256(export_bytes).hexdigest(),
     }, samples
