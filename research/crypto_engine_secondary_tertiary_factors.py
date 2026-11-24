@@ -276,7 +276,8 @@ def main():
         ("E09","E09_lookback","relative_momentum_lookback_bars",[24,48,72,120,168]),
         ("E09","E09_persist","relative_strength_persistence_bars",[1,2,3,4]),
         ("E10","E10_fast","fast_trend_ema_period",[8,10,15,20,30]),
-        ("E10","E10_mid","middle_trend_ema_period",[40,50,75,100,125]),\n        ("E10","E10_slow","slow_trend_ema_period",[100,150,200,250,300]),
+        ("E10","E10_mid","middle_trend_ema_period",[40,50,75,100,125]),
+        ("E10","E10_slow","slow_trend_ema_period",[100,150,200,250,300]),
     ]
     DEV_END="2024-11-22"
     data={s:indicators(load_symbol(s)) for s in SYMBOLS}
