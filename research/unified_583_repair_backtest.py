@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import subprocess
+from zipfile import BadZipFile, ZipFile
 from collections import deque
 from pathlib import Path
 from urllib.parse import urlparse
@@ -422,42 +423,59 @@ def ft_run(row, strategy_class, timeframe):
             "execution_engine": "Freqtrade",
             "symbol": "BTC+ETH",
         }, []
-    # Freqtrade writes both a timestamped trade export and a timestamped
-    # .meta.json summary, as well as a hidden .last_result.json pointer.
-    # Only the non-meta backtest-result JSON contains the closed-trade list.
-    result_files = sorted(
-        (
-            p for p in result_dir.glob("backtest-result-*.json")
-            if not p.name.endswith(".meta.json")
-        ),
+    # Freqtrade 2026.10 stores the real timestamped JSON result INSIDE
+    # backtest-result-<timestamp>.zip. The adjacent .meta.json and hidden
+    # .last_result.json are metadata/pointers and must never be parsed as trades.
+    result_archives = sorted(
+        result_dir.glob("backtest-result-*.zip"),
         key=lambda p: p.stat().st_mtime
     )
-    if not result_files:
+    if not result_archives:
         pointer = result_dir / ".last_result.json"
         pointer_text = pointer.read_text(encoding="utf-8")[:1500] if pointer.is_file() else "missing"
         return {
             "status": "ERROR",
             "detail": (
-                "Freqtrade exited 0 but produced no timestamped JSON trade export in "
+                "Freqtrade exited 0 but produced no timestamped backtest-result ZIP in "
                 + str(result_dir) + "; files=" + repr(sorted(p.name for p in result_dir.iterdir()))
-                + "; hidden pointer=" + pointer_text + "\n"
+                + "; hidden pointer=" + pointer_text + "\\n"
                 + process.stdout[-2500:]
             ),
             "compatibility_notes": compatibility,
             "execution_engine": "Freqtrade",
             "symbol": "BTC+ETH",
         }, []
-    export_path = result_files[-1]
-    if not export_path.name.startswith("backtest-result-") or export_path.name.endswith(".meta.json"):
-        raise ValueError(f"Refusing non-trade Freqtrade export: {export_path.name}")
-    result_object = json.loads(export_path.read_text(encoding="utf-8"))
-    trades = find_trades(result_object)
+    archive_path = result_archives[-1]
+    export_file = archive_path.stem + ".json"
+    try:
+        with ZipFile(archive_path, "r") as archive:
+            members = set(archive.namelist())
+            if export_file not in members:
+                raise ValueError(
+                    f"Timestamped Freqtrade JSON member {export_file!r} missing from "
+                    f"{archive_path.name}; members={sorted(members)[:30]}"
+                )
+            export_bytes = archive.read(export_file)
+    except BadZipFile as exc:
+        raise ValueError(f"Freqtrade backtest export is not a valid ZIP: {archive_path}") from exc
+    result_object = json.loads(export_bytes.decode("utf-8"))
+    strategy_payload = (
+        result_object.get("strategy", {}).get(strategy_class)
+        if isinstance(result_object, dict) else None
+    )
+    if not isinstance(strategy_payload, dict):
+        raise ValueError(
+            f"Timestamped Freqtrade JSON lacks strategy payload for {strategy_class}"
+        )
+    trades = strategy_payload.get("trades")
     if not isinstance(trades, list):
-        raise ValueError("Freqtrade export did not contain a trades list")
+        raise ValueError("Timestamped Freqtrade JSON strategy payload lacks a trades list")
     values = []
     for trade in trades:
-        if not isinstance(trade, dict) or "profit_abs" not in trade:
-            raise ValueError("Freqtrade closed-trade record lacks profit_abs")
+        if not isinstance(trade, dict):
+            raise ValueError("Freqtrade closed-trade record is not an object")
+        if trade.get("is_open") is True:
+            raise ValueError("Freqtrade export contains a still-open trade in its closed-trade list")
         if not trade.get("open_date") or not trade.get("close_date"):
             raise ValueError("Freqtrade closed-trade record lacks open_date or close_date")
         if trade.get("profit_abs") in ("", None):
@@ -466,6 +484,11 @@ def ft_run(row, strategy_class, timeframe):
         if not math.isfinite(value):
             raise ValueError("Non-finite Freqtrade closed-trade profit")
         values.append(value)
+    export_dir = OUT / "freqtrade_exports" / row["harvest_id"] / timeframe
+    export_dir.mkdir(parents=True, exist_ok=True)
+    stored_export = export_dir / export_file
+    stored_export.write_bytes(export_bytes)
+    export_artifact_path = stored_export.relative_to(OUT).as_posix()
     samples = []
     if trades:
         selected = list(enumerate(trades[:3]))
@@ -487,10 +510,13 @@ def ft_run(row, strategy_class, timeframe):
         "compatibility_notes": compatibility,
         "execution_engine": "Freqtrade",
         "symbol": "BTC+ETH",
-        "export_file": export_path.name,
+        "export_file": export_file,
         "export_format": "timestamped_freqtrade_json",
+        "export_container_file": archive_path.name,
+        "export_container_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
+        "export_artifact_path": export_artifact_path,
         "export_trade_records_validated": len(trades),
-        "export_sha256": hashlib.sha256(export_path.read_bytes()).hexdigest(),
+        "export_sha256": hashlib.sha256(export_bytes).hexdigest(),
     }, samples
 
 def write_rows(path, rows):
