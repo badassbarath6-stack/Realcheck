@@ -1,0 +1,31 @@
+name: Crypto 10 Engine Five Year Selected-Parameter Backtest
+on:
+  push:
+    branches: [research/crypto-10-engine-5y-selected]
+    paths:
+      - "research/crypto_10_engine_5y_selected.py"
+      - ".github/workflows/crypto-10-engine-5y-selected.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install --upgrade pandas numpy requests
+      - name: Run five-year fixed-parameter backtests
+        run: python research/crypto_10_engine_5y_selected.py
+      - name: Upload full results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crypto-10-engine-five-year-selected-results
+          path: crypto-10-engine-five-year-results/
+          if-no-files-found: error
+          retention-days: 90
