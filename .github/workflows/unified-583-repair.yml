@@ -1,12 +1,6 @@
 name: Unified 583 Engine Repair Backtest
 
 on:
-  push:
-    branches: [research/unified-583-three-year]
-    paths:
-      - "research/unified_583_repair_backtest.py"
-      - "research/unified_583_repair_aggregate.py"
-      - ".github/workflows/unified-583-repair.yml"
   workflow_dispatch:
 
 permissions:
