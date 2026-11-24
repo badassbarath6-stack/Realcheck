@@ -96,6 +96,8 @@ def pine_run(row, timeframe, symbol):
     source_text = source_path.read_text(encoding="utf-8", errors="replace")
     needs_context, reason = pine_requires_context(row, source_text)
     lookahead_on = "YES" if re.search(r"barmerge\.lookahead_on|lookahead\s*=\s*barmerge\.lookahead_on", source_text) else "NO"
+    tick = 0.1 if symbol == "BTC" else 0.01
+    min_contract = 0.001 if symbol == "BTC" else 0.01
     base = {
         "engine_id": row["harvest_id"],
         "engine_name": Path(urlparse(row.get("source_url", "")).path).stem,
@@ -104,6 +106,8 @@ def pine_run(row, timeframe, symbol):
         "symbol": symbol,
         "execution_engine": "PyneCore",
         "lookahead_on": lookahead_on,
+        "tick_size": tick,
+        "min_contract": min_contract,
     }
     if needs_context:
         return {
@@ -135,8 +139,6 @@ def pine_run(row, timeframe, symbol):
         )
         for x in frame.itertuples(index=False)
     ]
-    tick = 0.1 if symbol == "BTC" else 0.01
-    min_contract = 0.001 if symbol == "BTC" else 0.01
     scale = int(round(1.0 / tick))
     syminfo = SymInfo(
         prefix="BINANCE", ticker=symbol, currency="USDT",
@@ -416,11 +418,23 @@ def ft_run(row, strategy_class, timeframe):
             "execution_engine": "Freqtrade",
             "symbol": "BTC+ETH",
         }, []
-    result_files = sorted(result_dir.glob("*.json"), key=lambda p: p.stat().st_mtime)
+    # Freqtrade writes a hidden .last_result.json pointer alongside the
+    # timestamped backtest-result-*.json export. Never parse the pointer as
+    # the trade export: it contains metadata, not the closed-trade records.
+    result_files = sorted(
+        (p for p in result_dir.glob("*.json") if not p.name.startswith(".")),
+        key=lambda p: p.stat().st_mtime
+    )
     if not result_files:
+        pointer = result_dir / ".last_result.json"
+        pointer_text = pointer.read_text(encoding="utf-8")[:1500] if pointer.is_file() else "missing"
         return {
             "status": "ERROR",
-            "detail": "Freqtrade exited 0 but produced no JSON trade export in " + str(result_dir) + "\n" + process.stdout[-2500:],
+            "detail": (
+                "Freqtrade exited 0 but produced no timestamped JSON trade export in "
+                + str(result_dir) + "; hidden pointer=" + pointer_text + "\n"
+                + process.stdout[-2500:]
+            ),
             "compatibility_notes": compatibility,
             "execution_engine": "Freqtrade",
             "symbol": "BTC+ETH",
