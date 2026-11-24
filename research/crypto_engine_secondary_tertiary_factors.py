@@ -136,8 +136,8 @@ def signal_map(d, eth=None, overrides=None):
     sig05_long=(bbz_dyn<-bb_z)&(e.rsi<e05_rsi)
     sig05_short=(bbz_dyn>bb_z)&(e.rsi>100-e05_rsi)
     # E06: dynamic RSI period and reversal confirmation.
-    sig06_long=(rsi_dyn<rsi_extreme)&(rsi_dyn>rsi_dyn.shift(e06_confirm))
-    sig06_short=(rsi_dyn>100-rsi_extreme)&(rsi_dyn<rsi_dyn.shift(e06_confirm))
+    sig06_long=(rsi_dyn<rsi_extreme)&(rsi_dyn.shift(e06_confirm)>=rsi_extreme)
+    sig06_short=(rsi_dyn>100-rsi_extreme)&(rsi_dyn.shift(e06_confirm)<=100-rsi_extreme)
     # E07: volume shock with body-size quality filter.
     body=(c-e.open).abs()/atr
     sig07_long=(volz_dyn>vol_z)&(c>e.open)&(c>e.ema50)&(body>=e07_body)
