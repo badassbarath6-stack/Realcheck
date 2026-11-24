@@ -350,3 +350,5 @@ def main():
     }
     (OUT/"manifest.json").write_text(json.dumps(manifest,indent=2))
     print(json.dumps({"configurations":config_count,"selected":sel.to_dict(orient="records")},indent=2,default=str))
+
+# Trigger workflow after workflow definition is present on the default branch.
