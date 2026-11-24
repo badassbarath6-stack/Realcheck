@@ -88,7 +88,7 @@ def signal_map(d, eth=None, overrides=None):
     e07_look=int(get("E07_lookback",30)); e07_body=float(get("E07_body",0.0))
     e08_range=int(get("E08_range",48)); e08_quant=float(get("E08_quantile",.20))
     e09_look=int(get("E09_lookback",72)); e09_persist=int(get("E09_persist",1))
-    e10_fast=int(get("E10_fast",20)); e10_slow=int(get("E10_slow",50))
+    e10_fast=int(get("E10_fast",20)); e10_mid=int(get("E10_mid",50)); e10_slow=int(get("E10_slow",200))
 
     # Dynamic indicator variants used only by their corresponding engine.
     atr=e.atr
@@ -109,7 +109,7 @@ def signal_map(d, eth=None, overrides=None):
     squeeze_exp=e.bbwidth<e.bbwidth.rolling(e04_look).quantile(squeeze_q)
     rel_btc=c.pct_change(e09_look)
     ema_fast=c.ewm(span=e10_fast,adjust=False).mean()
-    ema_slow=c.ewm(span=e10_slow,adjust=False).mean()
+    ema_mid=c.ewm(span=e10_mid,adjust=False).mean()\n    ema_slow=c.ewm(span=e10_slow,adjust=False).mean()
 
     def confirmed(condition, n):
         n=max(1,int(n))
@@ -254,7 +254,7 @@ def main():
         "E07_lookback":30,"E07_body":0.0,
         "E08_range":48,"E08_quantile":.20,
         "E09_lookback":72,"E09_persist":1,
-        "E10_fast":20,"E10_slow":50}
+        "E10_fast":20,"E10_mid":50,"E10_slow":200}
     DIMENSIONS=[
         ("E01","E01_buffer","breakout_clearance_atr",[0,.05,.10,.15,.20]),
         ("E01","E01_confirm","consecutive_breakout_closes",[1,2,3]),
@@ -275,12 +275,12 @@ def main():
         ("E09","E09_lookback","relative_momentum_lookback_bars",[24,48,72,120,168]),
         ("E09","E09_persist","relative_strength_persistence_bars",[1,2,3,4]),
         ("E10","E10_fast","fast_trend_ema_period",[8,10,15,20,30]),
-        ("E10","E10_slow","slow_trend_ema_period",[40,50,75,100,150,200]),
+        ("E10","E10_mid","middle_trend_ema_period",[40,50,75,100,125]),\n        ("E10","E10_slow","slow_trend_ema_period",[100,150,200,250,300]),
     ]
     DEV_END="2024-11-22"
     data={s:indicators(load_symbol(s)) for s in SYMBOLS}
     # Preserve ETH close series for BTC-vs-ETH relative-return calculations.
-    eth_close=data["ETHUSDT"].set_index("time").close
+    eth_close=data["ETHUSDT"].close.copy()
     # attach close series on the passed ETH return series (pandas attrs survives use here)
     eth_arg= data["ETHUSDT"].ret72.copy()
     eth_arg.attrs["close_series"]=eth_close
