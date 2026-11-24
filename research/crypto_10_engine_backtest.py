@@ -40,6 +40,7 @@ def load_symbol(symbol):
         time.sleep(.03)
     if not frames: raise RuntimeError(f"No candles downloaded for {symbol}")
     d=pd.concat(frames,ignore_index=True).drop_duplicates("open_time").sort_values("open_time")
+    d["open_time"]=pd.to_numeric(d["open_time"],errors="coerce")
     d["time"]=pd.to_datetime(d.open_time,unit="ms",utc=True)
     for c in ["open","high","low","close","volume"]: d[c]=pd.to_numeric(d[c],errors="coerce")
     d=d[(d.time>=pd.Timestamp(START,tz="UTC"))&(d.time<pd.Timestamp(END,tz="UTC"))].dropna().reset_index(drop=True)
