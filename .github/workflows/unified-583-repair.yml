@@ -150,9 +150,10 @@ jobs:
     timeout-minutes: 360
     strategy:
       fail-fast: false
-      max-parallel: 12
+      max-parallel: 20
       matrix:
         batch: [0,1,2,3,4,5,6,7,8,9,10,11]
+        part: [0,1,2,3]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -175,11 +176,11 @@ jobs:
           git -C pynecore-strategies checkout 13f6388d7d95144bb828f8881bede77cf2008ea7
           test -d pynecore-strategies/scripts
       - name: Run assigned engines across 5m, 15m, 30m, 1h and 4h
-        run: python research/unified_583_repair_backtest.py --batch ${{ matrix.batch }} --batches 12
+        run: python research/unified_583_repair_backtest.py --batch ${{ matrix.batch }} --batches 12 --part-index ${{ matrix.part }} --part-count 4
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: unified-583-repair-batch-${{ matrix.batch }}
+          name: unified-583-repair-batch-${{ matrix.batch }}-part-${{ matrix.part }}
           path: |
             three-year-results/batch_*.csv
             three-year-results/trade_samples_*.csv
@@ -207,6 +208,42 @@ jobs:
           pattern: unified-583-repair-batch-*
           path: collected
           merge-multiple: true
+      - name: Merge four worker parts into the 12 logical batch files
+        run: |
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          root = Path("collected")
+          def read(path):
+              if not path.is_file() or path.stat().st_size == 0:
+                  return []
+              with path.open(newline="", encoding="utf-8") as handle:
+                  return list(csv.DictReader(handle))
+          def write(path, rows):
+              if not rows:
+                  path.write_text("")
+                  return
+              fields = sorted({key for row in rows for key in row})
+              with path.open("w", newline="", encoding="utf-8") as handle:
+                  writer = csv.DictWriter(handle, fieldnames=fields)
+                  writer.writeheader()
+                  writer.writerows(rows)
+          for batch in range(12):
+              result_rows = []
+              sample_rows = []
+              for part in range(4):
+                  result_path = root / f"batch_{batch:02d}_part{part}.csv"
+                  sample_path = root / f"trade_samples_{batch:02d}_part{part}.csv"
+                  if not result_path.is_file() or result_path.stat().st_size == 0:
+                      raise SystemExit(f"Missing or empty worker output: {result_path}")
+                  result_rows.extend(read(result_path))
+                  if not sample_path.is_file():
+                      raise SystemExit(f"Missing worker trade-sample file: {sample_path}")
+                  sample_rows.extend(read(sample_path))
+              write(root / f"batch_{batch:02d}.csv", result_rows)
+              write(root / f"trade_samples_{batch:02d}.csv", sample_rows)
+              print({"logical_batch": batch, "result_rows": len(result_rows), "sample_rows": len(sample_rows)})
+          PY
       - name: Install aggregate runtime dependency
         run: python -m pip install pandas
       - name: Validate all 12 batches, all engine IDs, closed trades and rankings

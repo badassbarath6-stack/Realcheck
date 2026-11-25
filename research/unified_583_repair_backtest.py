@@ -537,10 +537,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch", type=int)
     parser.add_argument("--batches", type=int, default=12)
+    parser.add_argument("--part-index", type=int, default=0)
+    parser.add_argument("--part-count", type=int, default=1)
     parser.add_argument("--engine")
     parser.add_argument("--timeframe", choices=TFS)
     parser.add_argument("--output-tag", default="")
     args = parser.parse_args()
+    if args.batches < 1:
+        raise SystemExit("--batches must be >= 1")
+    if args.part_count < 1 or not 0 <= args.part_index < args.part_count:
+        raise SystemExit("--part-index must be within [0, part-count)")
     with Path("source-harvest/manifest.csv").open(newline="", encoding="utf-8") as handle:
         manifest = list(csv.DictReader(handle))
     selected = [row for row in manifest if row["harvest_id"] in SELECTED]
@@ -550,9 +556,18 @@ def main():
         if not selected:
             raise SystemExit(f"Unknown selected engine id: {args.engine}")
     if args.batch is not None:
+        if not 0 <= args.batch < args.batches:
+            raise SystemExit("--batch must be within [0, batches)")
         selected = [row for i, row in enumerate(selected) if i % args.batches == args.batch]
+    if args.part_count > 1:
+        selected = [row for i, row in enumerate(selected) if i % args.part_count == args.part_index]
     timeframes = [args.timeframe] if args.timeframe else TFS
-    tag = args.output_tag or (f"{args.batch:02d}" if args.batch is not None else "manual")
+    if args.output_tag:
+        tag = args.output_tag
+    elif args.batch is not None and args.part_count > 1:
+        tag = f"{args.batch:02d}_part{args.part_index}"
+    else:
+        tag = f"{args.batch:02d}" if args.batch is not None else "manual"
     results = []
     trade_samples = []
     batch_path = OUT / (f"batch_{tag}.csv" if tag.startswith("smoke") or tag == "manual" else f"batch_{tag}.csv")
@@ -563,7 +578,7 @@ def main():
         write_rows(sample_path, trade_samples)
 
     print(
-        f"Selected {len(selected)} engines for batch={args.batch}, tag={tag}",
+        f"Selected {len(selected)} engines for batch={args.batch}, part={args.part_index}/{args.part_count}, tag={tag}",
         flush=True
     )
     for row in selected:
