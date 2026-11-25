@@ -9,6 +9,7 @@ import math
 import os
 import re
 import shutil
+import signal
 import subprocess
 from zipfile import BadZipFile, ZipFile
 from collections import deque
@@ -93,6 +94,23 @@ def pine_requires_context(row, source_text):
             return True, reason
     return False, ""
 
+def iter_with_timeout(runner, timeout_seconds=600):
+    """Bound one PyneCore engine/symbol/timeframe execution on hosted runners."""
+    def _timeout_handler(signum, frame):
+        raise TimeoutError(
+            f"PyneCore execution exceeded {timeout_seconds}-second row timeout"
+        )
+
+    previous_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+    previous_timer = signal.getitimer(signal.ITIMER_REAL)
+    signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
+    try:
+        yield from runner.run_iter()
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, *previous_timer)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
 def pine_run(row, timeframe, symbol):
     source_path = Path(row["artifact_path"])
     source_text = source_path.read_text(encoding="utf-8", errors="replace")
@@ -157,7 +175,7 @@ def pine_run(row, timeframe, symbol):
     values = []
     first_samples = []
     last_samples = deque(maxlen=3)
-    for item in runner.run_iter():
+    for item in iter_with_timeout(runner, 600):
         if len(item) != 3:
             continue
         for trade in item[2]:
@@ -609,6 +627,7 @@ def main():
                         "execution_engine": "Freqtrade",
                     }
                     try:
+                        print(f"Running Python {engine_id} {strategy_class} {timeframe}", flush=True)
                         metrics, samples = ft_run(row, strategy_class, timeframe)
                         results.append({**base, **metrics})
                         trade_samples.extend(samples)
@@ -637,6 +656,7 @@ def main():
                         ) else "NO",
                     }
                     try:
+                        print(f"Running Pine {engine_id} {symbol} {timeframe}", flush=True)
                         metrics, samples = pine_run(row, timeframe, symbol)
                         results.append({**base, **metrics})
                         trade_samples.extend(samples)
