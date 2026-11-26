@@ -175,7 +175,7 @@ def pine_run(row, timeframe, symbol):
     values = []
     first_samples = []
     last_samples = deque(maxlen=3)
-    for item in iter_with_timeout(runner, 600):
+    for item in iter_with_timeout(runner, 1200):
         if len(item) != 3:
             continue
         for trade in item[2]:
@@ -213,6 +213,13 @@ def transform_freqtrade_source(source_text):
     notes = []
     original = source_text
     source_text = patch_legacy_dicts(source_text)
+    # Legacy Freqtrade v2 exit callback was removed; preserve callback logic under v3 name.
+    source_text = re.sub(r"\\bcustom_sell\\b", "custom_exit", source_text)
+    # NumPy 2 removed these aliases; use the unchanged NaN sentinel.
+    source_text = re.sub(r"\\bnp\\.(?:NaN|NAN)\\b", "np.nan", source_text)
+    # Pandas removed fillna(method=...) in recent releases.
+    source_text = re.sub(r"\\.fillna\\(\\s*method\\s*=\\s*(['\\"])ffill\\1\\s*\\)", ".ffill()", source_text)
+    source_text = re.sub(r"\\.fillna\\(\\s*method\\s*=\\s*(['\\"])bfill\\1\\s*\\)", ".bfill()", source_text)
     # Preserve hyperopt parameter spaces while converting old v2 signal strings.
     source_text = re.sub(
         r"(space\s*=\s*)(['\"])(buy|sell)\2",
@@ -315,6 +322,10 @@ def _offline_fill_leverage_tiers(self):
         for pair in ("BTC/USDT:USDT", "ETH/USDT:USDT")
     }
 
+import numpy as np
+np.NaN = np.nan
+np.NAN = np.nan
+
 Exchange._api_reload_markets = _offline_api_reload_markets
 Exchange.check_time_offset = lambda self: None
 Exchange.fill_leverage_tiers = _offline_fill_leverage_tiers
@@ -363,6 +374,7 @@ def ft_run(row, strategy_class, timeframe):
     tmp.mkdir(parents=True, exist_ok=True)
     original = source.read_text(encoding="utf-8", errors="replace")
     transformed, compatibility = transform_freqtrade_source(original)
+    Path("user_data/csvs").mkdir(parents=True, exist_ok=True)
     target = tmp / source.name
     target.write_text(transformed, encoding="utf-8")
     # Freqtrade's USD-M pair notation maps to BTC_USDT_USDT / ETH_USDT_USDT.
@@ -558,6 +570,7 @@ def main():
     parser.add_argument("--part-index", type=int, default=0)
     parser.add_argument("--part-count", type=int, default=1)
     parser.add_argument("--engine")
+    parser.add_argument("--engine-list-file")
     parser.add_argument("--timeframe", choices=TFS)
     parser.add_argument("--output-tag", default="")
     args = parser.parse_args()
@@ -573,6 +586,16 @@ def main():
         selected = [row for row in selected if row["harvest_id"] == args.engine]
         if not selected:
             raise SystemExit(f"Unknown selected engine id: {args.engine}")
+    if args.engine_list_file:
+        raw_ids = Path(args.engine_list_file).read_text(encoding="utf-8").replace(",", "\\n").splitlines()
+        requested_ids = {item.strip() for item in raw_ids if item.strip() and not item.strip().startswith("#")}
+        known_ids = {row["harvest_id"] for row in selected}
+        unknown_ids = sorted(requested_ids - known_ids)
+        if unknown_ids:
+            raise SystemExit(f"Unknown engine IDs in list: {unknown_ids}")
+        selected = [row for row in selected if row["harvest_id"] in requested_ids]
+        if not selected:
+            raise SystemExit("Engine list selected no engines")
     if args.batch is not None:
         if not 0 <= args.batch < args.batches:
             raise SystemExit("--batch must be within [0, batches)")
@@ -584,6 +607,8 @@ def main():
         tag = args.output_tag
     elif args.batch is not None and args.part_count > 1:
         tag = f"{args.batch:02d}_part{args.part_index}"
+    elif args.part_count > 1:
+        tag = f"rebuild_part{args.part_index}"
     else:
         tag = f"{args.batch:02d}" if args.batch is not None else "manual"
     results = []
