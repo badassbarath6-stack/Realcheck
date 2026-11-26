@@ -63,6 +63,7 @@ def archive_paths(symbol, data_dir):
         name = f"{symbol}-1m-{d.year}-{d.month:02d}-{d.day:02d}.zip"
         url = f"{BASE}/daily/klines/{symbol}/1m/{name}"
         paths.append(download(url, Path(data_dir) / name))
+        d += timedelta(days=1)
     return paths
 
 
@@ -260,6 +261,7 @@ def simulate_model(bars, signals, model, htf=None, confirm_tf=None):
         eligible.append((sig_i, direction))
     # Each SL/RR configuration is a separate portfolio with its own position lock.
     output = []
+    time_to_idx = {b["t"]: i for i, b in enumerate(bars)}
     for sl in SL_ATR:
         for rr in RR_VALUES:
             next_allowed = 0
@@ -272,7 +274,7 @@ def simulate_model(bars, signals, model, htf=None, confirm_tf=None):
                 trade.update({"model": model, "sl_atr": sl, "rr": rr,
                               "period": split_name(trade["entry_time"])})
                 output.append(trade)
-                exit_i = next((j for j, b in enumerate(bars) if b["t"] == trade["exit_time"]), sig_i)
+                exit_i = time_to_idx.get(trade["exit_time"], sig_i)
                 next_allowed = exit_i + 1
     return output
 
