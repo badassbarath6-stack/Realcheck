@@ -1,0 +1,128 @@
+name: Top 10 Crypto Engine Fee Audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: top10-crypto-fee-audit
+  cancel-in-progress: false
+
+jobs:
+  pine-ledgers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        part: [0,1,2,3,4]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/unified-583-three-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-three-year-inputs
+          run-id: 45358233591
+          github-token: ${{ github.token }}
+          repository: badassbarath6-stack/Realcheck
+          path: .
+      - name: Install PyneCore and data dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          python -m pip install "pynesys-pynecore[cli]>=6.12.1" pyarrow pandas
+      - name: Retrieve pinned compiled Pine strategy corpus
+        run: |
+          git clone https://github.com/theonetrade/pynecore-strategies.git pynecore-strategies
+          git -C pynecore-strategies checkout 13f6388d7d95144bb828f8881bede77cf2008ea7
+          test -d pynecore-strategies/scripts
+      - name: Export every closed trade for assigned top-10 Pine engine
+        run: |
+          python research/unified_583_repair_backtest.py \
+            --engine-list-file research/top10_pine_fee_audit_engine_ids.txt \
+            --part-index ${{ matrix.part }} --part-count 5 \
+            --output-tag top10_pine_fee_part${{ matrix.part }} \
+            --export-full-trade-ledger
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: top10-pine-fee-ledger-part-${{ matrix.part }}
+          path: |
+            three-year-results/batch_top10_pine_fee_part${{ matrix.part }}.csv
+            three-year-results/trade_samples_top10_pine_fee_part${{ matrix.part }}.csv
+          if-no-files-found: warn
+          retention-days: 90
+
+  aggregate:
+    needs: pine-ledgers
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/unified-583-three-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download original Freqtrade ledgers for the five top-10 Python engines
+        run: mkdir -p baseline
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-repair-batch-7-part-16
+          run-id: 45670542789
+          github-token: ${{ github.token }}
+          repository: badassbarath6-stack/Realcheck
+          path: baseline/SRC0540
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-repair-batch-0-part-12
+          run-id: 45670542789
+          github-token: ${{ github.token }}
+          repository: badassbarath6-stack/Realcheck
+          path: baseline/SRC0399
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-repair-batch-2-part-18
+          run-id: 45670542789
+          github-token: ${{ github.token }}
+          repository: badassbarath6-stack/Realcheck
+          path: baseline/SRC0581
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-repair-batch-7-part-0
+          run-id: 45670542789
+          github-token: ${{ github.token }}
+          repository: badassbarath6-stack/Realcheck
+          path: baseline/SRC0632
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-repair-batch-9-part-4
+          run-id: 45670542789
+          github-token: ${{ github.token }}
+          repository: badassbarath6-stack/Realcheck
+          path: baseline/SRC0748
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: top10-pine-fee-ledger-part-*
+          path: collected
+          merge-multiple: true
+      - name: Install audit dependencies
+        run: python -m pip install pandas
+      - name: Recalculate gross, standard-net and stressed-net metrics
+        run: |
+          python research/unified_583_fee_audit.py \
+            --baseline baseline --collected collected --output top10-fee-audit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: top10-gross-net-fee-audit
+          path: top10-fee-audit/
+          if-no-files-found: warn
+          retention-days: 90
