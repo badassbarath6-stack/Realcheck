@@ -60,9 +60,6 @@ def archive_paths(symbol, data_dir):
         day = (day.replace(day=28) + timedelta(days=4)).replace(day=1)
     d = END_EXCLUSIVE.replace(day=1)
     while d < END_EXCLUSIVE:
-        d += timedelta(days=1)
-        if d >= END_EXCLUSIVE:
-            break
         name = f"{symbol}-1m-{d.year}-{d.month:02d}-{d.day:02d}.zip"
         url = f"{BASE}/daily/klines/{symbol}/1m/{name}"
         paths.append(download(url, Path(data_dir) / name))
@@ -181,12 +178,12 @@ def make_signals(bars):
     return signals
 
 
-def latest_completed_direction(htf_bars, entry_time):
+def latest_completed_direction(htf_bars, entry_time, htf_minutes):
     # Only candles whose close time is <= entry time may confirm a lower-TF signal.
     lo, hi = 0, len(htf_bars)
     while lo < hi:
         mid = (lo + hi) // 2
-        if htf_bars[mid]["t"] + TFS[CURRENT_TF] * MS <= entry_time:
+        if htf_bars[mid]["t"] + htf_minutes * MS <= entry_time:
             lo = mid + 1
         else:
             hi = mid
@@ -250,33 +247,34 @@ def split_name(timestamp):
     return "oos"
 
 
-def simulate_model(bars, signals, model, htf=None):
-    rows = []
+def simulate_model(bars, signals, model, htf=None, confirm_tf=None):
+    eligible = []
     for sig_i, direction in signals:
-        sig = bars[sig_i]
         entry_i = sig_i + 1
-        if entry_i >= len(bars): continue
+        if entry_i >= len(bars):
+            continue
         if htf is not None:
-            confirm = latest_completed_direction(htf, bars[entry_i]["t"])
-            if confirm != direction: continue
-        rows.append((sig_i, direction))
-    # One open position per model; no overlapping trades.
+            confirm = latest_completed_direction(htf, bars[entry_i]["t"], TFS[confirm_tf])
+            if confirm != direction:
+                continue
+        eligible.append((sig_i, direction))
+    # Each SL/RR configuration is a separate portfolio with its own position lock.
     output = []
-    next_allowed = 0
-    for sig_i, direction in rows:
-        if sig_i < next_allowed: continue
-        for sl in SL_ATR:
-            for rr in RR_VALUES:
+    for sl in SL_ATR:
+        for rr in RR_VALUES:
+            next_allowed = 0
+            for sig_i, direction in eligible:
+                if sig_i < next_allowed:
+                    continue
                 trade = evaluate_trade(bars, sig_i, direction, sl, rr)
-                if trade:
-                    trade.update({"model": model, "sl_atr": sl, "rr": rr,
-                                  "period": split_name(trade["entry_time"])})
-                    output.append(trade)
-        # Position lock based on the longest tested target/stop outcome.
-        outcomes = [x for x in output if x["signal_time"] == bars[sig_i]["t"]]
-        next_allowed = max((next((j for j, b in enumerate(bars) if b["t"] == x["exit_time"]), sig_i) for x in outcomes), default=sig_i) + 1
+                if not trade:
+                    continue
+                trade.update({"model": model, "sl_atr": sl, "rr": rr,
+                              "period": split_name(trade["entry_time"])})
+                output.append(trade)
+                exit_i = next((j for j, b in enumerate(bars) if b["t"] == trade["exit_time"]), sig_i)
+                next_allowed = exit_i + 1
     return output
-
 
 def write_csv(path, rows):
     path = Path(path)
@@ -320,7 +318,7 @@ def run_symbol(symbol, data_dir, output_dir):
             if TFS[confirm_tf] <= TFS[exec_tf]: continue
             htf = enriched[confirm_tf]
             model = f"MTF_VOL2X_{exec_tf}_CONFIRM_{confirm_tf}"
-            trades = simulate_model(exec_bars, base_signals, model, htf=htf)
+            trades = simulate_model(exec_bars, base_signals, model, htf=htf, confirm_tf=confirm_tf)
             all_trades.extend([dict(x, symbol=symbol, execution_tf=exec_tf, confirmation_tf=confirm_tf) for x in trades])
     for model in sorted({x["model"] for x in all_trades}):
         for sl in SL_ATR:
