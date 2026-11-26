@@ -15,7 +15,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: top10-crypto-fee-audit
+  group: top10-crypto-fee-audit-restart-v2
   cancel-in-progress: false
 
 jobs:
@@ -24,9 +24,9 @@ jobs:
     timeout-minutes: 360
     strategy:
       fail-fast: false
-      max-parallel: 5
+      max-parallel: 10
       matrix:
-        part: [0,1,2,3,4]
+        part: [0,1,2,3,4,5,6,7,8,9]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,13 +54,13 @@ jobs:
         run: |
           python research/unified_583_repair_backtest.py \
             --engine-list-file research/top10_pine_fee_audit_engine_ids.txt \
-            --part-index ${{ matrix.part }} --part-count 5 \
+            --part-index ${{ matrix.part }} --part-count 10 \
             --output-tag top10_pine_fee_part${{ matrix.part }} \
             --export-full-trade-ledger
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: top10-pine-fee-ledger-part-${{ matrix.part }}
+          name: top10-pine-fee-ledger-v2-part-${{ matrix.part }}
           path: |
             three-year-results/batch_top10_pine_fee_part${{ matrix.part }}.csv
             three-year-results/trade_samples_top10_pine_fee_part${{ matrix.part }}.csv
@@ -117,7 +117,7 @@ jobs:
           path: baseline/SRC0748
       - uses: actions/download-artifact@v4
         with:
-          pattern: top10-pine-fee-ledger-part-*
+          pattern: top10-pine-fee-ledger-v2-part-*
           path: collected
           merge-multiple: true
       - name: Install audit dependencies
