@@ -216,7 +216,7 @@ def transform_freqtrade_source(source_text):
     # Legacy Freqtrade v2 exit callback was removed; preserve callback logic under v3 name.
     source_text = re.sub(r"\bcustom_sell\b", "custom_exit", source_text)
     # NumPy 2 removed these aliases; use the unchanged NaN sentinel.
-    source_text = re.sub(r"\bnp\.(?:NaN|NAN)\b", "np.nan", source_text)
+    source_text = re.sub(r"\b(?:np|numpy)\.(?:NaN|NAN)\b", "np.nan", source_text)
     # Pandas removed fillna(method=...) in recent releases.
     source_text = re.sub(r"\.fillna\(\s*method\s*=\s*(['\"])ffill\1\s*\)", ".ffill()", source_text)
     source_text = re.sub(r"\.fillna\(\s*method\s*=\s*(['\"])bfill\1\s*\)", ".bfill()", source_text)
@@ -629,7 +629,9 @@ def main():
         language = row["implementation_language"]
         if language == "python":
             source = Path(row["artifact_path"])
-            classes = [row.get("class_name", "").strip()] if row.get("class_name", "").strip() else find_classes(source)
+            discovered_classes = find_classes(source)
+            preferred_class = row.get("class_name", "").strip()
+            classes = [preferred_class] if preferred_class in discovered_classes else discovered_classes
             if not classes:
                 for timeframe in timeframes:
                     results.append({
