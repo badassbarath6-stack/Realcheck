@@ -1,0 +1,136 @@
+name: Rebuild Failed Crypto Engines and Rank Top 100
+
+on:
+  push:
+    branches: [research/unified-583-three-year]
+    paths:
+      - "research/unified_583_failed_engine_ids.txt"
+      - "research/unified_583_repair_backtest.py"
+      - "research/unified_583_failed_rebuild_aggregate.py"
+      - ".github/workflows/unified-583-failed-rebuild.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: unified-583-failed-rebuild
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/unified-583-three-year
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-three-year-inputs
+          run-id: 45358233591
+          github-token: ${{ github.token }}
+          repository: badassbarath6-stack/Realcheck
+          path: .
+      - name: Verify source corpus and cached futures candles
+        run: |
+          test -f source-harvest/manifest.csv
+          test -f user_data/data/binance/futures/BTC_USDT-5m-futures.feather
+          test -f user_data/data/binance/futures/ETH_USDT-4h-futures.feather
+          test "$(wc -l < research/unified_583_failed_engine_ids.txt)" -eq 87
+          echo "Prepared the pinned 1,000-source corpus and cached three-year Binance USD-M candles."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unified-583-failed-rebuild-inputs
+          path: |
+            source-harvest/
+            user_data/data/binance/futures/
+            research/unified_583_failed_engine_ids.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  rebuild:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        part: [0,1,2,3,4,5,6,7,8]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/unified-583-three-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-failed-rebuild-inputs
+          path: .
+      - name: Install Freqtrade, PyneCore and compatibility dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          python -m pip install "freqtrade>=2024.1" "pynesys-pynecore[cli]>=6.12.1" pyarrow arrow ta
+          freqtrade --version
+      - name: Retrieve pinned PyneCore compiled strategy corpus
+        run: |
+          git clone https://github.com/theonetrade/pynecore-strategies.git pynecore-strategies
+          git -C pynecore-strategies checkout 13f6388d7d95144bb828f8881bede77cf2008ea7
+          test -d pynecore-strategies/scripts
+      - name: Rebuild assigned failed engines across all five timeframes
+        run: |
+          python research/unified_583_repair_backtest.py \
+            --engine-list-file research/unified_583_failed_engine_ids.txt \
+            --part-index ${{ matrix.part }} --part-count 9
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unified-583-failed-rebuild-part-${{ matrix.part }}
+          path: |
+            three-year-results/batch_rebuild_part${{ matrix.part }}.csv
+            three-year-results/trade_samples_rebuild_part${{ matrix.part }}.csv
+            three-year-results/freqtrade_exports/**
+          if-no-files-found: warn
+          retention-days: 90
+
+  aggregate:
+    needs: rebuild
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/unified-583-three-year
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: unified-583-repair-final-results
+          run-id: 45670542789
+          github-token: ${{ github.token }}
+          repository: badassbarath6-stack/Realcheck
+          path: baseline
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: unified-583-failed-rebuild-part-*
+          path: collected
+          merge-multiple: true
+      - name: Install aggregation dependency
+        run: python -m pip install pandas
+      - name: Merge retries and generate distinct-engine top 100
+        run: |
+          python research/unified_583_failed_rebuild_aggregate.py \
+            --baseline baseline --collected collected \
+            --engine-list research/unified_583_failed_engine_ids.txt \
+            --output rebuilt-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unified-583-rebuilt-top-100-and-trade-details
+          path: rebuilt-results/
+          if-no-files-found: warn
+          retention-days: 90
