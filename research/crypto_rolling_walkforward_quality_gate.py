@@ -355,8 +355,29 @@ def main():
         if df.empty: return pd.DataFrame()
         for key,g in df.groupby(group_cols):
             if not isinstance(key,tuple): key=(key,)
+            trades=int(g.trades.sum())
+            net=float(g.net_pnl_usd.sum())
+            wins_total=0.0; losses_total=0.0
+            for _,r in g.iterrows():
+                pf=r.profit_factor; pnl=float(r.net_pnl_usd)
+                if pd.isna(pf) or not np.isfinite(pf): continue
+                pf=float(pf)
+                if pf<1 and pnl<0:
+                    loss=abs(pnl)/(1-pf); wins_total+=pf*loss; losses_total+=loss
+                elif pf>1 and pnl>0:
+                    loss=pnl/(pf-1); wins_total+=pf*loss; losses_total+=loss
+                elif pf==1:
+                    # A unit PF with non-zero net can only be rounding noise.
+                    wins_total+=max(pnl,0.0); losses_total+=max(-pnl,0.0)
             row=dict(zip(group_cols,key))
-            row.update(summarize(g.sort_values("test_start") if "test_start" in g else g))
+            row.update({"trades":trades,
+                "win_rate_pct":round(float((g.win_rate_pct*g.trades).sum()/trades),2) if trades else 0,
+                "net_pnl_usd":round(net,2),
+                "profit_factor":round(wins_total/losses_total,3) if losses_total else None,
+                "expectancy_pct":round(float((g.expectancy_pct*g.trades).sum()/trades),4) if trades else 0,
+                "max_drawdown_pct":round(float(g.max_drawdown_pct.min()),2) if g.max_drawdown_pct.notna().any() else None,
+                "avg_win_pct":round(float((g.avg_win_pct*(g.trades*g.win_rate_pct/100)).sum()/(g.trades*g.win_rate_pct/100).sum()),4) if (g.trades*g.win_rate_pct/100).sum()>0 else 0,
+                "avg_loss_pct":round(float((g.avg_loss_pct*(g.trades*(1-g.win_rate_pct/100))).sum()/(g.trades*(1-g.win_rate_pct/100)).sum()),4) if (g.trades*(1-g.win_rate_pct/100)).sum()>0 else 0})
             rows.append(row)
         return pd.DataFrame(rows)
     if not oos_df.empty:
