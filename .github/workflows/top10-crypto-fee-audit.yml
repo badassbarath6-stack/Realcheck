@@ -2,6 +2,13 @@ name: Top 10 Crypto Engine Fee Audit
 
 on:
   workflow_dispatch:
+  push:
+    branches: [research/unified-583-three-year]
+    paths:
+      - "research/top10_pine_fee_audit_engine_ids.txt"
+      - "research/unified_583_fee_audit.py"
+      - "research/unified_583_repair_backtest.py"
+      - ".github/workflows/top10-crypto-fee-audit.yml"
 
 permissions:
   contents: read
