@@ -269,9 +269,10 @@ def main():
         for symbol in SYMBOLS:
             if code=="E09" and symbol!="BTCUSDT": continue
             eth_close=data["ETHUSDT"].close if symbol=="BTCUSDT" else None
-            if eth_close is not None:
-                eth_close.attrs["close_series"]=eth_close
-            sig=signal_map(data[symbol],eth_close,{**PRIMARY,**DEFAULTS})[engine]
+            eth_ret=eth_close.pct_change(72) if eth_close is not None else None
+            if eth_ret is not None:
+                eth_ret.attrs["close_series"]=eth_close
+            sig=signal_map(data[symbol],eth_ret,{**PRIMARY,**DEFAULTS})[engine]
             signals[(code,symbol)]=sig
     # Six-month non-overlapping forward test blocks, each using only the immediately
     # preceding 24 months to select SL/buffer/RR. Primary and secondary factors stay fixed.
