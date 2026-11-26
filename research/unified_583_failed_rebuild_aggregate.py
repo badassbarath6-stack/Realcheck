@@ -34,12 +34,33 @@ def main():
     bad={eid:int(counts.get(eid,0)) for eid in ids if int(counts.get(eid,0)) != (10 if str(base.loc[base.engine_id==eid,"language"].iloc[0])=="pine" else 5)}
     if bad:
         raise SystemExit(f"Incomplete retry rows by engine: {bad}")
-    # Replace all old result cells for these engines with the complete retry pass.
-    combined=pd.concat([base[~base.engine_id.isin(ids)],retry],ignore_index=True,sort=False)
+    # Freeze every engine whose original eligible median PF is already > 1.30.
+    # Retry results for those engines are ignored; their baseline rows and trades remain untouched.
+    base_for_pf=base.copy()
+    for c in ["trades","profit_factor"]:
+        base_for_pf[c]=pd.to_numeric(base_for_pf[c],errors="coerce")
+    base_for_pf["metric_warning"]=base_for_pf["metric_warning"].fillna("")
+    base_for_pf["lookahead_on"]=base_for_pf["lookahead_on"].fillna("NO").astype(str).str.upper()
+    eligible_base=base_for_pf[
+        (base_for_pf.status=="BACKTESTED") &
+        (base_for_pf.profit_factor_status=="FINITE") &
+        (base_for_pf.trades>=30) &
+        base_for_pf.profit_factor.notna() &
+        (base_for_pf.metric_warning=="") &
+        (base_for_pf.lookahead_on!="YES")
+    ]
+    protected_ids=set(eligible_base.groupby("engine_id").profit_factor.median().loc[lambda z:z>1.30].index)
+    active_ids=ids-protected_ids
+    retry_active=retry[retry.engine_id.isin(active_ids)].copy()
+    if set(retry_active.engine_id.dropna().unique())!=active_ids:
+        raise SystemExit(f"Active retry coverage mismatch after PF>1.30 protection: expected {len(active_ids)}, got {retry_active.engine_id.nunique()}")
+    # Replace only underperforming/failed engines. High-PF engines are frozen as a whole.
+    combined=pd.concat([base[~base.engine_id.isin(active_ids)],retry_active],ignore_index=True,sort=False)
     combined.to_csv(out/"all_engine_results_combined.csv",index=False)
-    failed=combined[combined.engine_id.isin(ids)].copy()
+    failed=combined[combined.engine_id.isin(active_ids)].copy()
     failed.to_csv(out/"failed_engine_rebuild_results.csv",index=False)
-    samples=pd.concat([base_samples[~base_samples.engine_id.isin(ids)],retry_samples],ignore_index=True,sort=False)
+    retry_samples_active=retry_samples[retry_samples.engine_id.isin(active_ids)].copy()
+    samples=pd.concat([base_samples[~base_samples.engine_id.isin(active_ids)],retry_samples_active],ignore_index=True,sort=False)
     samples.to_csv(out/"trade_samples_combined.csv",index=False)
 
     for c in ["trades","profit_factor","win_rate_pct","net_profit"]:
@@ -88,17 +109,19 @@ def main():
     samples[samples.engine_id.isin(top.engine_id)].to_csv(out/"top_100_trade_samples.csv",index=False)
     summary={
         "retry_engine_count":len(ids),
-        "retry_result_rows":len(retry),
-        "retry_status_counts":retry.status.value_counts(dropna=False).to_dict(),
-        "retry_backtested_rows":int((retry.status=="BACKTESTED").sum()),
-        "retry_error_rows":int((retry.status=="ERROR").sum()),
-        "retry_not_run_rows":int(retry.status.astype(str).str.startswith("NOT_RUN").sum()),
+        "protected_high_pf_engine_count":len(protected_ids),
+        "active_retry_engine_count":len(active_ids),
+        "retry_result_rows":len(retry_active),
+        "retry_status_counts":retry_active.status.value_counts(dropna=False).to_dict(),
+        "retry_backtested_rows":int((retry_active.status=="BACKTESTED").sum()),
+        "retry_error_rows":int((retry_active.status=="ERROR").sum()),
+        "retry_not_run_rows":int(retry_active.status.astype(str).str.startswith("NOT_RUN").sum()),
         "combined_engine_count":int(combined.engine_id.nunique()),
         "eligible_distinct_engines_for_ranking":int(len(agg)),
         "top_100_distinct_engines":int(len(top)),
         "top_100_detail_rows":int(len(details)),
         "ranking_method":"Median finite PF across per-symbol/timeframe result cells with >=30 closed trades; excludes lookahead and metric-warning rows; requires >=2 eligible cells per engine; ties broken by total closed trades then profitable-cell percentage.",
-        "note":"Net profit is reported for context but is not used as the primary ranking metric because sizing conventions vary across source engines."
+        "note":"Net profit is reported for context but is not used as the primary ranking metric because sizing conventions vary across source engines. Any engine with original eligible median PF > 1.30 is frozen: baseline rows and trades are retained and retry outputs are ignored."
     }
     (out/"summary.json").write_text(json.dumps(summary,indent=2,default=str)+"\n")
     print(json.dumps(summary,indent=2,default=str))
