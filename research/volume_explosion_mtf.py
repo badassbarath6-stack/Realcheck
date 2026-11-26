@@ -225,21 +225,24 @@ def evaluate_trade(bars, signal_i, direction, sl_mult, rr):
 
 
 def metrics(trades):
-    p = [x["net_bps"] for x in trades]
-    gp = sum(x for x in p if x > 0)
-    gl = -sum(x for x in p if x < 0)
+    net = [x["net_bps"] for x in trades]
+    gross = [x["gross_bps"] for x in trades]
+    gp_net = sum(x for x in net if x > 0)
+    gl_net = -sum(x for x in net if x < 0)
+    gp_gross = sum(x for x in gross if x > 0)
+    gl_gross = -sum(x for x in gross if x < 0)
     equity = peak = drawdown = 0.0
-    for x in p:
+    for x in net:
         equity += x
         peak = max(peak, equity)
         drawdown = max(drawdown, peak - equity)
-    return {"trades": len(p), "wins": sum(x > 0 for x in p), "losses": sum(x <= 0 for x in p),
-            "win_rate_pct": 100 * sum(x > 0 for x in p) / len(p) if p else 0.0,
-            "gross_profit_bps": gp, "gross_loss_bps": gl,
-            "net_bps": sum(p), "profit_factor": gp / gl if gl else (999.0 if gp else 0.0),
-            "expectancy_bps": sum(p) / len(p) if p else 0.0,
+    return {"trades": len(net), "wins": sum(x > 0 for x in net), "losses": sum(x <= 0 for x in net),
+            "win_rate_pct": 100 * sum(x > 0 for x in net) / len(net) if net else 0.0,
+            "gross_profit_bps": gp_gross, "gross_loss_bps": gl_gross,
+            "net_profit_bps": sum(net), "net_bps": sum(net),
+            "profit_factor": gp_net / gl_net if gl_net else (999.0 if gp_net else 0.0),
+            "expectancy_bps": sum(net) / len(net) if net else 0.0,
             "max_drawdown_bps": drawdown}
-
 
 def split_name(timestamp):
     dt = datetime.fromtimestamp(timestamp / 1000, timezone.utc).date()
@@ -325,8 +328,12 @@ def run_symbol(symbol, data_dir, output_dir):
     for model in sorted({x["model"] for x in all_trades}):
         for sl in SL_ATR:
             for rr in RR_VALUES:
-                for period in ("train", "validation", "oos"):
-                    selected = [x for x in all_trades if x["model"] == model and x["sl_atr"] == sl and x["rr"] == rr and x["period"] == period]
+                for period in ("train", "validation", "oos", "year_2023", "year_2024", "year_2025", "year_2026"):
+                    if period.startswith("year_"):
+                        year = int(period[-4:])
+                        selected = [x for x in all_trades if x["model"] == model and x["sl_atr"] == sl and x["rr"] == rr and datetime.fromtimestamp(x["entry_time"] / 1000, timezone.utc).year == year]
+                    else:
+                        selected = [x for x in all_trades if x["model"] == model and x["sl_atr"] == sl and x["rr"] == rr and x["period"] == period]
                     summary.append({"symbol": symbol, "model": model, "sl_atr": sl, "rr": rr,
                                     "period": period, **metrics(selected)})
     out = Path(output_dir)
