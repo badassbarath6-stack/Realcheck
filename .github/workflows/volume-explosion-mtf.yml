@@ -13,6 +13,9 @@ on:
         type: choice
         options: [BOTH, BTCUSDT, ETHUSDT]
         default: BOTH
+concurrency:
+  group: volume-explosion-mtf-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
