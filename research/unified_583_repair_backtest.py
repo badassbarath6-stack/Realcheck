@@ -214,12 +214,12 @@ def transform_freqtrade_source(source_text):
     original = source_text
     source_text = patch_legacy_dicts(source_text)
     # Legacy Freqtrade v2 exit callback was removed; preserve callback logic under v3 name.
-    source_text = re.sub(r"\\bcustom_sell\\b", "custom_exit", source_text)
+    source_text = re.sub(r"\bcustom_sell\b", "custom_exit", source_text)
     # NumPy 2 removed these aliases; use the unchanged NaN sentinel.
-    source_text = re.sub(r"\\bnp\\.(?:NaN|NAN)\\b", "np.nan", source_text)
+    source_text = re.sub(r"\bnp\.(?:NaN|NAN)\b", "np.nan", source_text)
     # Pandas removed fillna(method=...) in recent releases.
-    source_text = re.sub(r"\\.fillna\\(\\s*method\\s*=\\s*(['\\"])ffill\\1\\s*\\)", ".ffill()", source_text)
-    source_text = re.sub(r"\\.fillna\\(\\s*method\\s*=\\s*(['\\"])bfill\\1\\s*\\)", ".bfill()", source_text)
+    source_text = re.sub(r"\.fillna\(\s*method\s*=\s*(['"])ffill\1\s*\)", ".ffill()", source_text)
+    source_text = re.sub(r"\.fillna\(\s*method\s*=\s*(['"])bfill\1\s*\)", ".bfill()", source_text)
     # Preserve hyperopt parameter spaces while converting old v2 signal strings.
     source_text = re.sub(
         r"(space\s*=\s*)(['\"])(buy|sell)\2",
@@ -587,7 +587,7 @@ def main():
         if not selected:
             raise SystemExit(f"Unknown selected engine id: {args.engine}")
     if args.engine_list_file:
-        raw_ids = Path(args.engine_list_file).read_text(encoding="utf-8").replace(",", "\\n").splitlines()
+        raw_ids = Path(args.engine_list_file).read_text(encoding="utf-8").replace(",", "\n").splitlines()
         requested_ids = {item.strip() for item in raw_ids if item.strip() and not item.strip().startswith("#")}
         known_ids = {row["harvest_id"] for row in selected}
         unknown_ids = sorted(requested_ids - known_ids)
