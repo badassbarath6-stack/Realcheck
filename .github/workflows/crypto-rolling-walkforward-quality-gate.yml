@@ -1,0 +1,33 @@
+name: Crypto Rolling Walk Forward Quality Gate
+on:
+  push:
+    branches: [research/crypto-rolling-walkforward-quality-gate]
+    paths:
+      - "research/crypto_rolling_walkforward_quality_gate.py"
+      - ".github/workflows/crypto-rolling-walkforward-quality-gate.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rolling-walkforward:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install --upgrade pandas numpy requests
+      - name: Compile runner
+        run: python -m py_compile research/crypto_rolling_walkforward_quality_gate.py
+      - name: Run rolling walk-forward quality gate
+        run: python research/crypto_rolling_walkforward_quality_gate.py
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crypto-rolling-walkforward-quality-gate
+          path: crypto-rolling-walkforward-results/
+          if-no-files-found: error
+          retention-days: 90
