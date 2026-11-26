@@ -111,7 +111,7 @@ def iter_with_timeout(runner, timeout_seconds=600):
         signal.signal(signal.SIGALRM, previous_handler)
 
 
-def pine_run(row, timeframe, symbol):
+def pine_run(row, timeframe, symbol, export_full_trade_ledger=False):
     source_path = Path(row["artifact_path"])
     source_text = source_path.read_text(encoding="utf-8", errors="replace")
     needs_context, reason = pine_requires_context(row, source_text)
@@ -175,6 +175,7 @@ def pine_run(row, timeframe, symbol):
     values = []
     first_samples = []
     last_samples = deque(maxlen=3)
+    full_trade_ledger = []
     for item in iter_with_timeout(runner, 1200):
         if len(item) != 3:
             continue
@@ -186,10 +187,12 @@ def pine_run(row, timeframe, symbol):
             sample = sample_pyne_trade(
                 row["harvest_id"], base["engine_name"], symbol, timeframe, trade
             )
+            if export_full_trade_ledger:
+                full_trade_ledger.append(sample)
             if len(first_samples) < 3:
                 first_samples.append(sample)
             last_samples.append(sample)
-    samples = first_samples + [
+    samples = full_trade_ledger if export_full_trade_ledger else first_samples + [
         item for item in last_samples if item not in first_samples
     ]
     metrics = metric_summary(values)
@@ -573,6 +576,10 @@ def main():
     parser.add_argument("--engine-list-file")
     parser.add_argument("--timeframe", choices=TFS)
     parser.add_argument("--output-tag", default="")
+    parser.add_argument(
+        "--export-full-trade-ledger", action="store_true",
+        help="Export every closed PyneCore trade instead of only representative samples"
+    )
     args = parser.parse_args()
     if args.batches < 1:
         raise SystemExit("--batches must be >= 1")
@@ -684,7 +691,7 @@ def main():
                     }
                     try:
                         print(f"Running Pine {engine_id} {symbol} {timeframe}", flush=True)
-                        metrics, samples = pine_run(row, timeframe, symbol)
+                        metrics, samples = pine_run(row, timeframe, symbol, export_full_trade_ledger=args.export_full_trade_ledger)
                         results.append({**base, **metrics})
                         trade_samples.extend(samples)
                     except Exception as error:
