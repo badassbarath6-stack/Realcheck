@@ -218,8 +218,8 @@ def transform_freqtrade_source(source_text):
     # NumPy 2 removed these aliases; use the unchanged NaN sentinel.
     source_text = re.sub(r"\bnp\.(?:NaN|NAN)\b", "np.nan", source_text)
     # Pandas removed fillna(method=...) in recent releases.
-    source_text = re.sub(r"\.fillna\(\s*method\s*=\s*(['"])ffill\1\s*\)", ".ffill()", source_text)
-    source_text = re.sub(r"\.fillna\(\s*method\s*=\s*(['"])bfill\1\s*\)", ".bfill()", source_text)
+    source_text = re.sub(r"\.fillna\(\s*method\s*=\s*(['\"])ffill\1\s*\)", ".ffill()", source_text)
+    source_text = re.sub(r"\.fillna\(\s*method\s*=\s*(['\"])bfill\1\s*\)", ".bfill()", source_text)
     # Preserve hyperopt parameter spaces while converting old v2 signal strings.
     source_text = re.sub(
         r"(space\s*=\s*)(['\"])(buy|sell)\2",
