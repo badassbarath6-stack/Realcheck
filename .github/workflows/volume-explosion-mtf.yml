@@ -37,6 +37,23 @@ jobs:
         run: python -m py_compile research/volume_explosion_mtf.py
       - name: Download Binance USD-M klines and run all timeframes
         run: python research/volume_explosion_mtf.py --symbol "${{ matrix.symbol }}" --output-dir volume-mtf-results
+      - name: Build compact PF and entry report
+        run: |
+          python - <<'PY'
+          import csv, glob, os
+          for path in glob.glob("volume-mtf-results/*_volume_mtf_metrics.csv"):
+              symbol = os.path.basename(path).split("_")[0]
+              rows = list(csv.DictReader(open(path, newline="")))
+              oos = [r for r in rows if r["period"] == "oos" and int(float(r["trades"])) >= 30]
+              oos.sort(key=lambda r: (float(r["profit_factor"]), float(r["net_profit_bps"])), reverse=True)
+              top = oos[:100]
+              out = f"volume-mtf-results/{symbol}_TOP_OOS_MODELS.csv"
+              fields = ["symbol","model","sl_atr","rr","trades","wins","losses","win_rate_pct","gross_profit_bps","gross_loss_bps","net_profit_bps","profit_factor","expectancy_bps","max_drawdown_bps"]
+              with open(out,"w",newline="") as f:
+                  w=csv.DictWriter(f,fieldnames=fields); w.writeheader()
+                  for r in top: w.writerow({k:r.get(k,"") for k in fields})
+              print(f"{symbol}: {len(rows)} metric rows; {len(oos)} OOS-qualified configurations; top file {out}")
+          PY
       - name: Upload results and data audit
         if: always()
         uses: actions/upload-artifact@v4
