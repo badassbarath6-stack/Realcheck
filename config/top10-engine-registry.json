@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "purpose": "Preserve the first audited ten engine identities while live adapters are implemented and validated.",
+  "assets": [
+    "BTCUSDT",
+    "ETHUSDT"
+  ],
+  "source_engines": [
+    {
+      "engine_id": "SRC0540",
+      "name": "IchiV1",
+      "source": "source-harvest/sources/0540_freqtrade_stuff.py",
+      "stress_net_pf": 7.573245,
+      "closed_trades": 3229,
+      "fee_audit": "PASS_PF_THRESHOLD",
+      "notes": "Original Freqtrade strategy; port must preserve informative timeframe and ROI/stop behavior."
+    },
+    {
+      "engine_id": "SRC0367",
+      "name": "VoVix DEVMA",
+      "source": "source-harvest/sources/0367_pynecore.pine",
+      "stress_net_pf": 0.335624,
+      "closed_trades": 21602,
+      "fee_audit": "FAIL_PF_THRESHOLD",
+      "notes": "Keep in registry for research; do not enable live until reworked and re-audited."
+    },
+    {
+      "engine_id": "SRC0151",
+      "name": "Hybrid RSI Breakout",
+      "source": "source-harvest/sources/0151_pynecore.pine",
+      "stress_net_pf": 0.483936,
+      "closed_trades": 67707,
+      "fee_audit": "FAIL_PF_THRESHOLD",
+      "notes": "Original sizing creates extreme pooled PnL; requires sizing and source-equivalent validation."
+    },
+    {
+      "engine_id": "SRC0383",
+      "name": "Zendog V3 DCA",
+      "source": "source-harvest/sources/0383_pynecore.pine",
+      "stress_net_pf": 4.626931,
+      "closed_trades": 1844,
+      "fee_audit": "PASS_PF_THRESHOLD",
+      "notes": "DCA strategy; tail risk and max exposure must be explicitly bounded before live use."
+    },
+    {
+      "engine_id": "SRC0399",
+      "name": "BBRSITV",
+      "source": "source-harvest/sources/0399_freqtrade_stuff.py",
+      "stress_net_pf": 2.833163,
+      "closed_trades": 123,
+      "fee_audit": "PASS_PF_THRESHOLD",
+      "notes": "Small sample; require out-of-sample validation and minimum trade count review."
+    },
+    {
+      "engine_id": "SRC0748",
+      "name": "Zeus",
+      "source": "source-harvest/sources/0748_freqtrade_stuff.py",
+      "stress_net_pf": 2.477103,
+      "closed_trades": 576,
+      "fee_audit": "PASS_PF_THRESHOLD",
+      "notes": "Original timeframe is 4h; preserve its staged ROI and stop behavior."
+    },
+    {
+      "engine_id": "SRC0581",
+      "name": "NASOSv4",
+      "source": "source-harvest/sources/0581_freqtrade_stuff.py",
+      "stress_net_pf": 1.691902,
+      "closed_trades": 145,
+      "fee_audit": "PASS_PF_THRESHOLD",
+      "notes": "Small sample; require out-of-sample validation."
+    },
+    {
+      "engine_id": "SRC0632",
+      "name": "NotAnotherSMAOffset",
+      "source": "source-harvest/sources/0632_freqtrade_stuff.py",
+      "stress_net_pf": 1.157235,
+      "closed_trades": 253,
+      "fee_audit": "FAIL_PF_THRESHOLD",
+      "notes": "Positive pooled stress PF but below 1.30 qualification threshold."
+    },
+    {
+      "engine_id": "SRC0008",
+      "name": "3Commas DCA",
+      "source": "source-harvest/sources/0008_pynecore.pine",
+      "stress_net_pf": 1.539568,
+      "closed_trades": 21127,
+      "fee_audit": "PASS_PF_THRESHOLD",
+      "notes": "DCA strategy; disable until bounded exposure, liquidation and tail-risk validation."
+    },
+    {
+      "engine_id": "SRC0156",
+      "name": "ICT Entry V2",
+      "source": "source-harvest/sources/0156_pynecore.pine",
+      "stress_net_pf": 0.581886,
+      "closed_trades": 655,
+      "fee_audit": "FAIL_PF_THRESHOLD",
+      "notes": "Keep research-only pending a correct port and re-test."
+    }
+  ],
+  "qualification": {
+    "preliminary_stress_pf_threshold": 1.3,
+    "preliminary_pass_count": 6,
+    "caveat": "Pooled PF is descriptive and does not establish robust profitability. Per-symbol/timeframe stability, funding coverage, drawdown, tail risk and source-equivalent replay are still required."
+  }
+}
