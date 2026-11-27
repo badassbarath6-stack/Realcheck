@@ -142,7 +142,7 @@ def enrich(bars):
         body = abs(c - o)
         rng = h - l
         out.append({"t": t, "o": o, "h": h, "l": l, "c": c, "v": vol,
-                    "tb": taker_buy, "atr": atr,
+                    "tb": taker_buy, "atr": atr, "avg_vol": avg_vol,
                     "vol_ratio": vol / avg_vol if avg_vol > 0 else float("nan"),
                     "body_ratio": body / rng if rng > 0 else 0.0,
                     "range_atr": rng / atr if atr > 0 else float("nan"),
@@ -219,7 +219,11 @@ def evaluate_trade(bars, signal_i, direction, sl_mult, rr):
     costs = 2 * (FEE_BPS_SIDE + SLIPPAGE_BPS_SIDE)
     return {"signal_time": sig["t"], "entry_time": entry_bar["t"], "exit_time": bars[exit_i]["t"],
             "direction": "LONG" if direction == 1 else "SHORT", "entry": entry,
-            "exit": exit_price, "exit_reason": reason, "gross_bps": gross,
+            "exit": exit_price, "stop": stop, "target": target, "exit_reason": reason,
+            "signal_open": sig["o"], "signal_high": sig["h"], "signal_low": sig["l"], "signal_close": sig["c"],
+            "signal_volume": sig["v"], "preceding_20_avg_volume": sig["avg_vol"],
+            "volume_ratio": sig["vol_ratio"], "signal_atr": sig["atr"],
+            "gross_bps": gross,
             "cost_bps": costs, "net_bps": gross - costs,
             "holding_bars": exit_i - signal_i - 1}
 
